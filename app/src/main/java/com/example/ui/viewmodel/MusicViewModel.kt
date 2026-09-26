@@ -1,0 +1,442 @@
+package com.example.ui.viewmodel
+
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.data.local.AppDatabase
+import com.example.data.local.PlaylistEntity
+import com.example.data.model.Track
+import com.example.data.repository.MusicRepository
+import com.example.data.remote.YouTubeSearchService
+import com.example.source.*
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
+
+enum class MainTab {
+    DISCOVER,
+    LIBRARY,
+    HISTORY
+}
+
+data class PlayerUiState(
+    val currentTrack: Track? = null,
+    val resolvedMedia: ResolvedMedia? = null,
+    val playbackType: PlaybackType = PlaybackType.YOUTUBE_EMBED,
+    val isPlaying: Boolean = false,
+    val currentPositionSec: Float = 0f,
+    val totalDurationSec: Float = 0f,
+    val volume: Float = 100f,
+    val isMuted: Boolean = false,
+    val isLooping: Boolean = false,
+    val isShuffling: Boolean = false,
+    val seekTargetSec: Float? = null,
+    val queue: List<Track> = emptyList(),
+    val queueIndex: Int = 0,
+    val isPlayerExpanded: Boolean = false,
+    val isQueueVisible: Boolean = false,
+    val preferredSourceMode: PreferredSourceMode = PreferredSourceMode.AUTO
+)
+
+data class BrutalUiState(
+    val activeTab: MainTab = MainTab.DISCOVER,
+    val searchQuery: String = "",
+    val searchResults: List<Track> = emptyList(),
+    val isSearching: Boolean = false,
+    val searchSuggestions: List<String> = emptyList(),
+    val selectedGenre: String = "TRENDING",
+    val genreTracks: List<Track> = emptyList(),
+    val isLoadingGenre: Boolean = false,
+    val directUrlInput: String = "",
+    val isFetchingDirectLink: Boolean = false,
+    val statusMessage: String? = null,
+    val selectedPlaylist: PlaylistEntity? = null,
+    val selectedPlaylistTracks: List<Track> = emptyList(),
+    val preferredSourceMode: PreferredSourceMode = PreferredSourceMode.AUTO
+)
+
+class MusicViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val repository = MusicRepository(AppDatabase.getInstance(application))
+    private val audioPlaybackManager = AudioPlaybackManager(application)
+
+    private val _playerState = MutableStateFlow(PlayerUiState())
+    val playerState: StateFlow<PlayerUiState> = _playerState.asStateFlow()
+
+    private val _uiState = MutableStateFlow(BrutalUiState())
+    val uiState: StateFlow<BrutalUiState> = _uiState.asStateFlow()
+
+    val favorites: StateFlow<List<Track>> = repository.favoritesFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val history: StateFlow<List<Track>> = repository.historyFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val playlists: StateFlow<List<PlaylistEntity>> = repository.playlistsFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private var searchJob: Job? = null
+    private var suggestionJob: Job? = null
+    private var genreJob: Job? = null
+
+    init {
+        // Collect direct audio progress from AudioPlaybackManager
+        viewModelScope.launch {
+            audioPlaybackManager.currentPosition.collect { pos ->
+                if (_playerState.value.playbackType == PlaybackType.DIRECT_AUDIO) {
+                    _playerState.update { it.copy(currentPositionSec = pos) }
+                }
+            }
+        }
+        viewModelScope.launch {
+            audioPlaybackManager.duration.collect { dur ->
+                if (_playerState.value.playbackType == PlaybackType.DIRECT_AUDIO && dur > 0) {
+                    _playerState.update { it.copy(totalDurationSec = dur) }
+                }
+            }
+        }
+        viewModelScope.launch {
+            audioPlaybackManager.isDirectPlaying.collect { playing ->
+                if (_playerState.value.playbackType == PlaybackType.DIRECT_AUDIO) {
+                    _playerState.update { it.copy(isPlaying = playing) }
+                }
+            }
+        }
+
+        // Initialize feed
+        selectGenre("TRENDING")
+    }
+
+    fun selectTab(tab: MainTab) {
+        _uiState.update { it.copy(activeTab = tab, selectedPlaylist = null) }
+    }
+
+    fun setPreferredSource(mode: PreferredSourceMode) {
+        _uiState.update { it.copy(preferredSourceMode = mode) }
+        _playerState.update { it.copy(preferredSourceMode = mode) }
+        showMessage("SOURCE MODE: ${mode.name}")
+
+        // Refresh genre feed for new source mode
+        selectGenre(_uiState.value.selectedGenre)
+
+        // If currently playing, re-resolve current track with the new source
+        _playerState.value.currentTrack?.let { track ->
+            playTrack(track)
+        }
+    }
+
+    fun selectGenre(genre: String) {
+        _uiState.update { it.copy(selectedGenre = genre, isLoadingGenre = true) }
+        genreJob?.cancel()
+        genreJob = viewModelScope.launch {
+            val tracks = if (genre.equals("TRENDING", ignoreCase = true)) {
+                repository.fetchTrendingTracks(_uiState.value.preferredSourceMode)
+            } else {
+                repository.fetchGenreTracks(genre, _uiState.value.preferredSourceMode)
+            }
+            _uiState.update { it.copy(genreTracks = tracks, isLoadingGenre = false) }
+        }
+    }
+
+    fun updateDirectUrlInput(input: String) {
+        _uiState.update { it.copy(directUrlInput = input) }
+    }
+
+    fun playDirectLink(urlOrId: String) {
+        val trimmed = urlOrId.trim()
+        if (trimmed.isBlank()) return
+
+        _uiState.update { it.copy(isFetchingDirectLink = true) }
+        viewModelScope.launch {
+            val track = repository.fetchDirectTrack(trimmed)
+            _uiState.update { it.copy(isFetchingDirectLink = false, directUrlInput = "") }
+            if (track != null) {
+                playTrack(track)
+                showMessage("RESOLVED: ${track.title.take(20)}")
+            } else {
+                showMessage("INVALID LINK OR STREAM ID")
+            }
+        }
+    }
+
+    fun playTrack(track: Track, newQueue: List<Track>? = null) {
+        viewModelScope.launch {
+            repository.recordPlayed(track)
+            val isFav = repository.isFavorite(track.videoId)
+            val updatedTrack = track.copy(isFavorite = isFav)
+
+            // Resolve through SourceResolver
+            val resolved = repository.resolveMedia(updatedTrack, _playerState.value.preferredSourceMode)
+
+            _playerState.update { current ->
+                val q = newQueue ?: if (current.queue.any { it.videoId == track.videoId }) current.queue else listOf(track) + current.queue
+                val idx = q.indexOfFirst { it.videoId == track.videoId }.coerceAtLeast(0)
+                current.copy(
+                    currentTrack = updatedTrack,
+                    resolvedMedia = resolved,
+                    playbackType = resolved.playbackType,
+                    isPlaying = true,
+                    queue = q,
+                    queueIndex = idx,
+                    currentPositionSec = 0f,
+                    seekTargetSec = 0f
+                )
+            }
+
+            // Direct audio playback vs YouTube IFrame playback
+            if (resolved.playbackType == PlaybackType.DIRECT_AUDIO && !resolved.streamUrl.isNullOrBlank()) {
+                audioPlaybackManager.playDirectStream(resolved.streamUrl) {
+                    onTrackFinished()
+                }
+            } else {
+                audioPlaybackManager.stop()
+            }
+
+            showMessage("RESOLVED: [${resolved.sourceName.uppercase()}] ${resolved.resolutionNote}")
+        }
+    }
+
+    fun togglePlayPause() {
+        val current = _playerState.value
+        if (current.currentTrack == null) return
+
+        if (current.playbackType == PlaybackType.DIRECT_AUDIO) {
+            if (current.isPlaying) {
+                audioPlaybackManager.pause()
+            } else {
+                audioPlaybackManager.resume()
+            }
+        } else {
+            _playerState.update { it.copy(isPlaying = !it.isPlaying) }
+        }
+    }
+
+    fun nextTrack() {
+        val current = _playerState.value
+        if (current.queue.isEmpty()) return
+
+        val nextIndex = if (current.isShuffling) {
+            current.queue.indices.random()
+        } else {
+            (current.queueIndex + 1) % current.queue.size
+        }
+        val next = current.queue[nextIndex]
+        playTrack(next)
+    }
+
+    fun previousTrack() {
+        val current = _playerState.value
+        if (current.queue.isEmpty()) return
+
+        val prevIndex = if (current.queueIndex > 0) current.queueIndex - 1 else current.queue.lastIndex
+        val prev = current.queue[prevIndex]
+        playTrack(prev)
+    }
+
+    fun toggleLoop() {
+        _playerState.update { it.copy(isLooping = !it.isLooping) }
+        showMessage(if (_playerState.value.isLooping) "LOOP: ACTIVE" else "LOOP: OFF")
+    }
+
+    fun toggleShuffle() {
+        _playerState.update { it.copy(isShuffling = !it.isShuffling) }
+        showMessage(if (_playerState.value.isShuffling) "SHUFFLE: ACTIVE" else "SHUFFLE: OFF")
+    }
+
+    fun seekTo(seconds: Float) {
+        val current = _playerState.value
+        if (current.playbackType == PlaybackType.DIRECT_AUDIO) {
+            audioPlaybackManager.seekTo(seconds)
+        }
+        _playerState.update { it.copy(currentPositionSec = seconds, seekTargetSec = seconds) }
+    }
+
+    fun clearSeekTarget() {
+        _playerState.update { it.copy(seekTargetSec = null) }
+    }
+
+    fun setVolume(volume: Float) {
+        val clamped = volume.coerceIn(0f, 100f)
+        audioPlaybackManager.setVolume(clamped)
+        _playerState.update { it.copy(volume = clamped, isMuted = clamped <= 0f) }
+    }
+
+    fun toggleMute() {
+        _playerState.update {
+            val newMuted = !it.isMuted
+            val vol = if (newMuted) 0f else 100f
+            audioPlaybackManager.setVolume(vol)
+            it.copy(isMuted = newMuted, volume = vol)
+        }
+    }
+
+    fun togglePlayerExpanded() {
+        _playerState.update { it.copy(isPlayerExpanded = !it.isPlayerExpanded) }
+    }
+
+    fun toggleQueueVisibility() {
+        _playerState.update { it.copy(isQueueVisible = !it.isQueueVisible) }
+    }
+
+    fun addToQueue(track: Track) {
+        _playerState.update { current ->
+            current.copy(queue = current.queue + track)
+        }
+        showMessage("QUEUED: ${track.title.take(15)}")
+    }
+
+    fun removeFromQueue(index: Int) {
+        _playerState.update { current ->
+            val mutable = current.queue.toMutableList()
+            if (index in mutable.indices) {
+                mutable.removeAt(index)
+            }
+            current.copy(queue = mutable)
+        }
+    }
+
+    fun clearQueue() {
+        val current = _playerState.value.currentTrack
+        _playerState.update {
+            it.copy(queue = if (current != null) listOf(current) else emptyList(), queueIndex = 0)
+        }
+        showMessage("QUEUE CLEARED")
+    }
+
+    fun onPlayerProgress(currentSec: Float, durationSec: Float) {
+        if (_playerState.value.playbackType == PlaybackType.YOUTUBE_EMBED) {
+            _playerState.update {
+                it.copy(
+                    currentPositionSec = currentSec,
+                    totalDurationSec = if (durationSec > 0) durationSec else it.totalDurationSec
+                )
+            }
+        }
+    }
+
+    fun onTrackFinished() {
+        if (_playerState.value.isLooping) {
+            seekTo(0f)
+            _playerState.update { it.copy(isPlaying = true) }
+            if (_playerState.value.playbackType == PlaybackType.DIRECT_AUDIO) {
+                _playerState.value.resolvedMedia?.streamUrl?.let { url ->
+                    audioPlaybackManager.playDirectStream(url) { onTrackFinished() }
+                }
+            }
+        } else {
+            nextTrack()
+        }
+    }
+
+    fun toggleFavorite(track: Track) {
+        viewModelScope.launch {
+            val isFav = repository.toggleFavorite(track)
+            if (_playerState.value.currentTrack?.videoId == track.videoId) {
+                _playerState.update { it.copy(currentTrack = it.currentTrack?.copy(isFavorite = isFav)) }
+            }
+            showMessage(if (isFav) "SAVED TO FAVORITES" else "REMOVED FROM FAVORITES")
+        }
+    }
+
+    fun updateSearchQuery(query: String) {
+        _uiState.update { it.copy(searchQuery = query) }
+        suggestionJob?.cancel()
+        if (query.isNotBlank()) {
+            suggestionJob = viewModelScope.launch {
+                delay(250)
+                val suggestions = YouTubeSearchService.getSearchSuggestions(query)
+                _uiState.update { it.copy(searchSuggestions = suggestions) }
+            }
+        } else {
+            _uiState.update { it.copy(searchSuggestions = emptyList(), searchResults = emptyList(), isSearching = false) }
+        }
+    }
+
+    fun performSearch(queryOverride: String? = null) {
+        val query = (queryOverride ?: _uiState.value.searchQuery).trim()
+        if (query.isBlank()) return
+
+        _uiState.update { it.copy(searchQuery = query, isSearching = true, searchSuggestions = emptyList()) }
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch {
+            val results = repository.search(query, _uiState.value.preferredSourceMode)
+            _uiState.update { it.copy(searchResults = results, isSearching = false) }
+            if (results.isEmpty()) {
+                showMessage("NO RESULTS FOR: $query")
+            } else {
+                showMessage("FOUND ${results.size} MULTI-SOURCE TRACKS")
+            }
+        }
+    }
+
+    fun clearSearch() {
+        _uiState.update { it.copy(searchQuery = "", searchResults = emptyList(), isSearching = false, searchSuggestions = emptyList()) }
+    }
+
+    fun createPlaylist(name: String) {
+        if (name.isBlank()) return
+        viewModelScope.launch {
+            repository.createPlaylist(name.trim().uppercase())
+            showMessage("PLAYLIST CREATED: ${name.trim().uppercase()}")
+        }
+    }
+
+    fun deletePlaylist(playlistId: Long) {
+        viewModelScope.launch {
+            repository.deletePlaylist(playlistId)
+            _uiState.update { it.copy(selectedPlaylist = null, selectedPlaylistTracks = emptyList()) }
+            showMessage("PLAYLIST DELETED")
+        }
+    }
+
+    fun openPlaylist(playlist: PlaylistEntity) {
+        _uiState.update { it.copy(selectedPlaylist = playlist) }
+        viewModelScope.launch {
+            repository.getTracksForPlaylist(playlist.id).collectLatest { tracks ->
+                _uiState.update { it.copy(selectedPlaylistTracks = tracks) }
+            }
+        }
+    }
+
+    fun addTrackToPlaylist(playlistId: Long, track: Track) {
+        viewModelScope.launch {
+            repository.addTrackToPlaylist(playlistId, track)
+            showMessage("TRACK ADDED TO PLAYLIST")
+        }
+    }
+
+    fun removeTrackFromPlaylist(playlistId: Long, videoId: String) {
+        viewModelScope.launch {
+            repository.removeTrackFromPlaylist(playlistId, videoId)
+            showMessage("TRACK REMOVED FROM PLAYLIST")
+        }
+    }
+
+    fun clearHistory() {
+        viewModelScope.launch {
+            repository.clearHistory()
+            showMessage("HISTORY CLEARED")
+        }
+    }
+
+    fun removeFromHistory(videoId: String) {
+        viewModelScope.launch {
+            repository.removeFromHistory(videoId)
+            showMessage("REMOVED FROM HISTORY")
+        }
+    }
+
+    fun showMessage(msg: String) {
+        _uiState.update { it.copy(statusMessage = msg) }
+        viewModelScope.launch {
+            delay(2800)
+            _uiState.update { if (it.statusMessage == msg) it.copy(statusMessage = null) else it }
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        audioPlaybackManager.stop()
+    }
+}
