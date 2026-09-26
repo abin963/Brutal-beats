@@ -38,7 +38,7 @@ class AudioPlaybackManager(context: Context) {
                 }
             }
             if (isUpdatingProgress) {
-                mainHandler.postDelayed(this, 500)
+                mainHandler.postDelayed(this, 250)
             }
         }
     }

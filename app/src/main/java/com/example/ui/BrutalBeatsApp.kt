@@ -13,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
@@ -43,6 +44,8 @@ fun BrutalBeatsApp(
     val favorites by viewModel.favorites.collectAsStateWithLifecycle()
     val history by viewModel.history.collectAsStateWithLifecycle()
     val playlists by viewModel.playlists.collectAsStateWithLifecycle()
+    val recommendations by viewModel.recommendations.collectAsStateWithLifecycle()
+    val isLoadingRecommendations by viewModel.isLoadingRecommendations.collectAsStateWithLifecycle()
 
     var trackToAddToPlaylist by remember { mutableStateOf<Track?>(null) }
     var showNewPlaylistInput by remember { mutableStateOf(false) }
@@ -67,10 +70,50 @@ fun BrutalBeatsApp(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
+        // Persistent YouTube Player bridge (keeps playback uninterrupted across screen transitions)
+        val isYouTube = playerState.playbackType == com.example.source.PlaybackType.YOUTUBE_EMBED
+        val ytVideoId = playerState.resolvedMedia?.youtubeVideoId ?: playerState.currentTrack?.videoId
+        val isVideoVisibleInExpanded = playerState.isPlayerExpanded && playerState.isVideoMode
+
+        if (isYouTube && !ytVideoId.isNullOrBlank() && !isVideoVisibleInExpanded) {
+            Box(
+                modifier = Modifier
+                    .size(1.dp)
+                    .alpha(0.001f)
+            ) {
+                com.example.ui.player.YouTubePlayerView(
+                    videoId = ytVideoId,
+                    isPlaying = playerState.isPlaying,
+                    volume = if (playerState.isMuted) 0f else playerState.volume,
+                    seekToSeconds = playerState.seekTargetSec,
+                    onStateChanged = { isPlaying ->
+                        if (isPlaying != playerState.isPlaying) {
+                            viewModel.setPlayingState(isPlaying)
+                        }
+                    },
+                    onBufferingChanged = { isBuffering ->
+                        viewModel.setBufferingState(isBuffering)
+                    },
+                    onTimeProgress = { cur, dur ->
+                        viewModel.onPlayerProgress(cur, dur)
+                    },
+                    onTrackEnded = {
+                        viewModel.onTrackFinished()
+                    },
+                    onError = {
+                        viewModel.showMessage("PLAYBACK ERROR (CODE $it)")
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+
         if (playerState.isPlayerExpanded) {
             // Fullscreen Now Playing screen
             NowPlayingScreen(
                 playerState = playerState,
+                recommendations = recommendations,
+                isLoadingRecommendations = isLoadingRecommendations,
                 onPlayPause = { viewModel.togglePlayPause() },
                 onNext = { viewModel.nextTrack() },
                 onPrevious = { viewModel.previousTrack() },
@@ -84,11 +127,19 @@ fun BrutalBeatsApp(
                 onRemoveFromQueue = { viewModel.removeFromQueue(it) },
                 onClearQueue = { viewModel.clearQueue() },
                 onPlayQueueItem = { viewModel.playTrack(it) },
+                onPlayRecommendedTrack = { recTrack ->
+                    val otherRecs = recommendations.filter { it.videoId != recTrack.videoId }
+                    viewModel.playTrack(recTrack, listOf(recTrack) + otherRecs)
+                },
+                onToggleVideoMode = { viewModel.toggleVideoMode() },
                 onMinimize = { viewModel.togglePlayerExpanded() },
                 onStateChanged = { isPlaying ->
                     if (isPlaying != playerState.isPlaying) {
-                        viewModel.togglePlayPause()
+                        viewModel.setPlayingState(isPlaying)
                     }
+                },
+                onBufferingChanged = { isBuffering ->
+                    viewModel.setBufferingState(isBuffering)
                 },
                 onTimeProgress = { cur, dur ->
                     viewModel.onPlayerProgress(cur, dur)

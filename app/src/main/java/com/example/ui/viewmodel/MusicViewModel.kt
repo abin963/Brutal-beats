@@ -30,6 +30,7 @@ data class PlayerUiState(
     val resolvedMedia: ResolvedMedia? = null,
     val playbackType: PlaybackType = PlaybackType.YOUTUBE_EMBED,
     val isPlaying: Boolean = false,
+    val isBuffering: Boolean = false,
     val currentPositionSec: Float = 0f,
     val totalDurationSec: Float = 0f,
     val volume: Float = 100f,
@@ -41,6 +42,7 @@ data class PlayerUiState(
     val queueIndex: Int = 0,
     val isPlayerExpanded: Boolean = false,
     val isQueueVisible: Boolean = false,
+    val isVideoMode: Boolean = false,
     val preferredSourceMode: PreferredSourceMode = PreferredSourceMode.AUTO
 )
 
@@ -81,16 +83,37 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     val playlists: StateFlow<List<PlaylistEntity>> = repository.playlistsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    private val _recommendations = MutableStateFlow<List<Track>>(emptyList())
+    val recommendations: StateFlow<List<Track>> = _recommendations.asStateFlow()
+
+    private val _isLoadingRecommendations = MutableStateFlow(false)
+    val isLoadingRecommendations: StateFlow<Boolean> = _isLoadingRecommendations.asStateFlow()
+
+    private val recommendationsCache = mutableMapOf<String, List<Track>>()
+    private var recommendationJob: Job? = null
     private var searchJob: Job? = null
     private var suggestionJob: Job? = null
     private var genreJob: Job? = null
+    private var lastSeekTimestamp = 0L
+    private var targetSeekSec = -1f
 
     init {
         // Collect direct audio progress from AudioPlaybackManager
         viewModelScope.launch {
             audioPlaybackManager.currentPosition.collect { pos ->
-                if (_playerState.value.playbackType == PlaybackType.DIRECT_AUDIO) {
-                    _playerState.update { it.copy(currentPositionSec = pos) }
+                if (_playerState.value.playbackType == PlaybackType.DIRECT_AUDIO && _playerState.value.isPlaying) {
+                    val now = System.currentTimeMillis()
+                    if (now - lastSeekTimestamp < 800) {
+                        if (targetSeekSec >= 0f && kotlin.math.abs(pos - targetSeekSec) > 2f) {
+                            return@collect
+                        }
+                    }
+                    targetSeekSec = -1f
+                    _playerState.update { current ->
+                        val prev = current.currentPositionSec
+                        val newPos = if (pos >= prev || (prev - pos > 4f)) pos else prev
+                        current.copy(currentPositionSec = newPos, isBuffering = false)
+                    }
                 }
             }
         }
@@ -104,7 +127,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             audioPlaybackManager.isDirectPlaying.collect { playing ->
                 if (_playerState.value.playbackType == PlaybackType.DIRECT_AUDIO) {
-                    _playerState.update { it.copy(isPlaying = playing) }
+                    _playerState.update { it.copy(isPlaying = playing, isBuffering = false) }
                 }
             }
         }
@@ -165,6 +188,34 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun parseDurationSeconds(durationStr: String?): Float {
+        if (durationStr.isNullOrBlank()) return 0f
+        val parts = durationStr.trim().split(":")
+        return when (parts.size) {
+            2 -> (parts[0].toIntOrNull() ?: 0) * 60f + (parts[1].toIntOrNull() ?: 0)
+            3 -> (parts[0].toIntOrNull() ?: 0) * 3600f + (parts[1].toIntOrNull() ?: 0) * 60f + (parts[2].toIntOrNull() ?: 0)
+            else -> 0f
+        }
+    }
+
+    fun loadRecommendations(track: Track) {
+        val cached = recommendationsCache[track.videoId]
+        if (cached != null && cached.isNotEmpty()) {
+            _recommendations.value = cached
+            _isLoadingRecommendations.value = false
+            return
+        }
+
+        recommendationJob?.cancel()
+        _isLoadingRecommendations.value = true
+        recommendationJob = viewModelScope.launch {
+            val recs = repository.fetchRecommendedTracks(track, _playerState.value.preferredSourceMode)
+            recommendationsCache[track.videoId] = recs
+            _recommendations.value = recs
+            _isLoadingRecommendations.value = false
+        }
+    }
+
     fun playTrack(track: Track, newQueue: List<Track>? = null) {
         viewModelScope.launch {
             repository.recordPlayed(track)
@@ -173,6 +224,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
             // Resolve through SourceResolver
             val resolved = repository.resolveMedia(updatedTrack, _playerState.value.preferredSourceMode)
+            val initialDuration = parseDurationSeconds(updatedTrack.duration)
 
             _playerState.update { current ->
                 val q = newQueue ?: if (current.queue.any { it.videoId == track.videoId }) current.queue else listOf(track) + current.queue
@@ -182,12 +234,17 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     resolvedMedia = resolved,
                     playbackType = resolved.playbackType,
                     isPlaying = true,
+                    isBuffering = true,
                     queue = q,
                     queueIndex = idx,
                     currentPositionSec = 0f,
+                    totalDurationSec = if (initialDuration > 0f) initialDuration else current.totalDurationSec,
                     seekTargetSec = 0f
                 )
             }
+
+            // Fetch contextual recommendations asynchronously
+            loadRecommendations(updatedTrack)
 
             // Direct audio playback vs YouTube IFrame playback
             if (resolved.playbackType == PlaybackType.DIRECT_AUDIO && !resolved.streamUrl.isNullOrBlank()) {
@@ -215,6 +272,18 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             _playerState.update { it.copy(isPlaying = !it.isPlaying) }
         }
+    }
+
+    fun setPlayingState(isPlaying: Boolean) {
+        _playerState.update { it.copy(isPlaying = isPlaying, isBuffering = false) }
+    }
+
+    fun setBufferingState(isBuffering: Boolean) {
+        _playerState.update { it.copy(isBuffering = isBuffering) }
+    }
+
+    fun toggleVideoMode() {
+        _playerState.update { it.copy(isVideoMode = !it.isVideoMode) }
     }
 
     fun nextTrack() {
@@ -250,11 +319,19 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun seekTo(seconds: Float) {
+        lastSeekTimestamp = System.currentTimeMillis()
+        targetSeekSec = seconds
         val current = _playerState.value
         if (current.playbackType == PlaybackType.DIRECT_AUDIO) {
             audioPlaybackManager.seekTo(seconds)
         }
-        _playerState.update { it.copy(currentPositionSec = seconds, seekTargetSec = seconds) }
+        _playerState.update {
+            it.copy(
+                currentPositionSec = seconds,
+                seekTargetSec = seconds,
+                isBuffering = false
+            )
+        }
     }
 
     fun clearSeekTarget() {
@@ -310,11 +387,28 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onPlayerProgress(currentSec: Float, durationSec: Float) {
+        val now = System.currentTimeMillis()
+        if (now - lastSeekTimestamp < 800) {
+            if (targetSeekSec >= 0f && kotlin.math.abs(currentSec - targetSeekSec) > 2f) {
+                return
+            }
+        }
+        targetSeekSec = -1f
+
         if (_playerState.value.playbackType == PlaybackType.YOUTUBE_EMBED) {
-            _playerState.update {
-                it.copy(
-                    currentPositionSec = currentSec,
-                    totalDurationSec = if (durationSec > 0) durationSec else it.totalDurationSec
+            _playerState.update { current ->
+                if (!current.isPlaying) return@update current // Freeze position when paused
+                val prev = current.currentPositionSec
+                // Prevent jitter: monotonic advancement forward unless scrubbed or looped
+                val newPos = if (currentSec >= prev || (prev - currentSec > 4f)) {
+                    currentSec
+                } else {
+                    prev
+                }
+                current.copy(
+                    currentPositionSec = newPos,
+                    totalDurationSec = if (durationSec > 0) durationSec else current.totalDurationSec,
+                    isBuffering = false
                 )
             }
         }

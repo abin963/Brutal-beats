@@ -1,18 +1,14 @@
 package com.example.ui.player
 
 import android.content.Intent
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.*
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.Track
 import com.example.source.PlaybackType
 import com.example.ui.components.BrutalThumbnail
+import com.example.ui.components.TrackCard
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.NeonLime
 import com.example.ui.theme.NeonPink
@@ -46,6 +43,8 @@ import com.example.ui.viewmodel.PlayerUiState
 @Composable
 fun NowPlayingScreen(
     playerState: PlayerUiState,
+    recommendations: List<Track>,
+    isLoadingRecommendations: Boolean,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
@@ -59,8 +58,11 @@ fun NowPlayingScreen(
     onRemoveFromQueue: (Int) -> Unit,
     onClearQueue: () -> Unit,
     onPlayQueueItem: (Track) -> Unit,
+    onPlayRecommendedTrack: (Track) -> Unit,
+    onToggleVideoMode: () -> Unit,
     onMinimize: () -> Unit,
     onStateChanged: (Boolean) -> Unit,
+    onBufferingChanged: (Boolean) -> Unit,
     onTimeProgress: (Float, Float) -> Unit,
     onTrackEnded: () -> Unit,
     onError: (Int) -> Unit,
@@ -77,6 +79,35 @@ fun NowPlayingScreen(
         label = "big_play_scale"
     )
 
+    // Dedicated local dragging and seek hold state to prevent progress bar from shaking/fighting with touch
+    var isUserDragging by remember { mutableStateOf(false) }
+    var dragProgressSec by remember { mutableFloatStateOf(0f) }
+    var seekHoldSec by remember { mutableFloatStateOf(-1f) }
+    var seekHoldTimestamp by remember { mutableLongStateOf(0L) }
+
+    // When new song starts, reset seekHold and dragging cleanly
+    LaunchedEffect(track.videoId) {
+        seekHoldSec = -1f
+        isUserDragging = false
+    }
+
+    // Release seek hold when playback position catches up or times out
+    if (seekHoldSec >= 0f) {
+        val elapsed = System.currentTimeMillis() - seekHoldTimestamp
+        if (elapsed > 1000L || kotlin.math.abs(playerState.currentPositionSec - seekHoldSec) < 1.5f) {
+            seekHoldSec = -1f
+        }
+    }
+
+    val totalSec = playerState.totalDurationSec.coerceAtLeast(1f)
+    val displayCurrentSec = when {
+        isUserDragging -> dragProgressSec
+        seekHoldSec >= 0f -> seekHoldSec
+        else -> playerState.currentPositionSec
+    }.coerceIn(0f, totalSec)
+
+    val sliderFraction = (displayCurrentSec / totalSec).coerceIn(0f, 1f)
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -84,7 +115,7 @@ fun NowPlayingScreen(
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {
-        // Top Action Bar: [Minimize] [NOW PLAYING] [Favorite]
+        // Top Action Bar: [Minimize] [NOW PLAYING & Source Info] [Video/Cover Toggle] [Favorite]
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -95,7 +126,7 @@ fun NowPlayingScreen(
             IconButton(
                 onClick = onMinimize,
                 modifier = Modifier
-                    .size(42.dp)
+                    .size(44.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surfaceVariant)
                     .testTag("minimize_player_btn")
@@ -125,20 +156,41 @@ fun NowPlayingScreen(
                 )
             }
 
-            IconButton(
-                onClick = { onToggleFavorite(track) },
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(CircleShape)
-                    .background(if (track.isFavorite) NeonPink.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant)
-                    .testTag("player_fav_btn")
-            ) {
-                Icon(
-                    imageVector = if (track.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                    contentDescription = "Favorite",
-                    tint = if (track.isFavorite) NeonPink else MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(22.dp)
-                )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                // Video Mode Toggle (for YouTube playback)
+                if (playerState.playbackType == PlaybackType.YOUTUBE_EMBED) {
+                    IconButton(
+                        onClick = onToggleVideoMode,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(if (playerState.isVideoMode) NeonLime.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Icon(
+                            imageVector = if (playerState.isVideoMode) Icons.Default.Image else Icons.Default.Videocam,
+                            contentDescription = if (playerState.isVideoMode) "Show Artwork" else "Show Video",
+                            tint = if (playerState.isVideoMode) NeonLime else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+
+                // Favorite Toggle
+                IconButton(
+                    onClick = { onToggleFavorite(track) },
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(if (track.isFavorite) NeonPink.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant)
+                        .testTag("player_fav_btn")
+                ) {
+                    Icon(
+                        imageVector = if (track.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = "Favorite",
+                        tint = if (track.isFavorite) NeonPink else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
             }
         }
 
@@ -149,12 +201,12 @@ fun NowPlayingScreen(
                 .verticalScroll(scrollState)
                 .padding(horizontal = 20.dp, vertical = 6.dp)
         ) {
-            // Artwork or YouTube Embed area
+            // Artwork or Video Area: ALWAYS displays prominent high-res artwork without black rectangle
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(1f),
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(22.dp),
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 6.dp,
                 shadowElevation = 8.dp,
@@ -163,77 +215,84 @@ fun NowPlayingScreen(
                     MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
                 )
             ) {
-                if (playerState.playbackType == PlaybackType.DIRECT_AUDIO) {
-                    // Direct Audio 320k view with high-res artwork & pulsating glow
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        BrutalThumbnail(
-                            imageUrl = track.thumbnailUrl,
-                            videoId = track.videoId,
-                            sourceId = track.sourceId,
-                            contentDescription = track.title,
-                            modifier = Modifier.fillMaxSize(),
-                            shape = RoundedCornerShape(20.dp),
-                            showSourceBadge = false
-                        )
+                Box(modifier = Modifier.fillMaxSize()) {
+                    // Artwork is ALWAYS loaded as the primary base layer filling the container
+                    BrutalThumbnail(
+                        imageUrl = track.thumbnailUrl,
+                        videoId = track.videoId,
+                        sourceId = track.sourceId,
+                        contentDescription = "${track.title} by ${track.artist}",
+                        modifier = Modifier.fillMaxSize(),
+                        shape = RoundedCornerShape(22.dp),
+                        showSourceBadge = false
+                    )
 
-                        // Subtle bottom gradient
+                    // If user activated Video Mode on YouTube, overlay the video view
+                    if (playerState.playbackType == PlaybackType.YOUTUBE_EMBED && playerState.isVideoMode) {
+                        val ytId = playerState.resolvedMedia?.youtubeVideoId ?: track.videoId
+                        YouTubePlayerView(
+                            videoId = ytId,
+                            isPlaying = playerState.isPlaying,
+                            volume = if (playerState.isMuted) 0f else playerState.volume,
+                            seekToSeconds = playerState.seekTargetSec,
+                            onStateChanged = onStateChanged,
+                            onBufferingChanged = onBufferingChanged,
+                            onTimeProgress = onTimeProgress,
+                            onTrackEnded = onTrackEnded,
+                            onError = onError,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+
+                    // Bottom gradient & status pill
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(80.dp)
+                            .align(Alignment.BottomCenter)
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))
+                                )
+                            )
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val isDirect = playerState.playbackType == PlaybackType.DIRECT_AUDIO
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .height(80.dp)
-                                .align(Alignment.BottomCenter)
-                                .background(
-                                    Brush.verticalGradient(
-                                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f))
-                                    )
-                                )
-                        )
-
-                        // Bitrate / Stream badge bottom
-                        Row(
-                            modifier = Modifier
-                                .align(Alignment.BottomStart)
-                                .padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (isDirect) NeonCyan else NeonLime)
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(NeonCyan)
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = "320 KBPS DIRECT",
-                                    color = Color.Black,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Black,
-                                    fontFamily = FontFamily.Monospace
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (playerState.isPlaying) "● ACTIVE STREAM" else "❚❚ PAUSED",
-                                color = Color.White,
+                                text = if (isDirect) "320 KBPS DIRECT" else "YT AUDIO STREAM",
+                                color = Color.Black,
                                 fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
+                                fontWeight = FontWeight.Black,
                                 fontFamily = FontFamily.Monospace
                             )
                         }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        Text(
+                            text = when {
+                                playerState.isBuffering -> "⏳ BUFFERING..."
+                                playerState.isPlaying -> "● ACTIVE PLAYBACK"
+                                else -> "❚❚ PAUSED"
+                            },
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
                     }
-                } else {
-                    // YouTube Official Embed View
-                    val ytId = playerState.resolvedMedia?.youtubeVideoId ?: track.videoId
-                    YouTubePlayerView(
-                        videoId = ytId,
-                        isPlaying = playerState.isPlaying,
-                        volume = if (playerState.isMuted) 0f else playerState.volume,
-                        seekToSeconds = playerState.seekTargetSec,
-                        onStateChanged = onStateChanged,
-                        onTimeProgress = onTimeProgress,
-                        onTrackEnded = onTrackEnded,
-                        onError = onError,
-                        modifier = Modifier.fillMaxSize()
-                    )
                 }
             }
 
@@ -259,7 +318,9 @@ fun NowPlayingScreen(
                         text = track.artist,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 
@@ -268,7 +329,10 @@ fun NowPlayingScreen(
                     onClick = {
                         val shareIntent = Intent().apply {
                             action = Intent.ACTION_SEND
-                            putExtra(Intent.EXTRA_TEXT, "Listening to ${track.title} by ${track.artist} on Brutal Beats!\nhttps://youtube.com/watch?v=${track.videoId}")
+                            putExtra(
+                                Intent.EXTRA_TEXT,
+                                "Listening to \"${track.title}\" by ${track.artist} on Brutal Beats!\nhttps://youtube.com/watch?v=${track.videoId}"
+                            )
                             type = "text/plain"
                         }
                         context.startActivity(Intent.createChooser(shareIntent, "Share Track"))
@@ -278,24 +342,30 @@ fun NowPlayingScreen(
                         imageVector = Icons.Default.Share,
                         contentDescription = "Share",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Progress Bar & Timestamps
-            val currentSec = playerState.currentPositionSec
-            val totalSec = playerState.totalDurationSec.coerceAtLeast(1f)
-            val fraction = (currentSec / totalSec).coerceIn(0f, 1f)
-
+            // Smooth Progress Bar & Timestamps
             Slider(
-                value = fraction,
-                onValueChange = { newFraction ->
-                    onSeek(newFraction * totalSec)
+                value = sliderFraction,
+                onValueChange = { frac ->
+                    isUserDragging = true
+                    dragProgressSec = frac * totalSec
                 },
-                modifier = Modifier.fillMaxWidth(),
+                onValueChangeFinished = {
+                    val target = dragProgressSec
+                    seekHoldSec = target
+                    seekHoldTimestamp = System.currentTimeMillis()
+                    isUserDragging = false
+                    onSeek(target)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("player_progress_slider"),
                 colors = SliderDefaults.colors(
                     thumbColor = NeonLime,
                     activeTrackColor = NeonLime,
@@ -308,12 +378,21 @@ fun NowPlayingScreen(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = formatTime(currentSec),
+                    text = formatTime(displayCurrentSec),
                     fontSize = 11.sp,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                if (playerState.isBuffering) {
+                    Text(
+                        text = "BUFFERING",
+                        fontSize = 10.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        color = NeonLime
+                    )
+                }
                 Text(
                     text = formatTime(totalSec),
                     fontSize = 11.sp,
@@ -323,9 +402,9 @@ fun NowPlayingScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
-            // Central Playback Controls: [Shuffle] [Prev] [GIANT PLAY] [Next] [Repeat]
+            // Central Playback Controls: [Shuffle] [Prev] [GIANT PLAY/PAUSE] [Next] [Repeat]
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly,
@@ -334,7 +413,7 @@ fun NowPlayingScreen(
                 // Shuffle Button
                 IconButton(
                     onClick = onToggleShuffle,
-                    modifier = Modifier.size(46.dp)
+                    modifier = Modifier.size(48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Shuffle,
@@ -372,12 +451,20 @@ fun NowPlayingScreen(
                         .testTag("overlay_play_pause_button"),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = if (playerState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = if (playerState.isPlaying) "Pause" else "Play",
-                        tint = Color.Black,
-                        modifier = Modifier.size(38.dp)
-                    )
+                    if (playerState.isBuffering) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(32.dp),
+                            strokeWidth = 3.dp,
+                            color = Color.Black
+                        )
+                    } else {
+                        Icon(
+                            imageVector = if (playerState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = if (playerState.isPlaying) "Pause" else "Play",
+                            tint = Color.Black,
+                            modifier = Modifier.size(38.dp)
+                        )
+                    }
                 }
 
                 // Next Button
@@ -396,7 +483,7 @@ fun NowPlayingScreen(
                 // Loop Button
                 IconButton(
                     onClick = onToggleLoop,
-                    modifier = Modifier.size(46.dp)
+                    modifier = Modifier.size(48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Repeat,
@@ -407,7 +494,7 @@ fun NowPlayingScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(22.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             // Volume & Queue Toggles
             Row(
@@ -529,6 +616,91 @@ fun NowPlayingScreen(
                     }
                 }
             }
+
+            // AUTOMATIC "RECOMMENDED FOR YOU" SECTION (Based on currently playing song)
+            Spacer(modifier = Modifier.height(28.dp))
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Recommend,
+                                contentDescription = null,
+                                tint = NeonLime,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "RECOMMENDED FOR YOU",
+                                color = MaterialTheme.colorScheme.onBackground,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
+                        Text(
+                            text = "Based on \"${track.title.take(30)}\"",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    if (isLoadingRecommendations) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = NeonLime
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                if (isLoadingRecommendations && recommendations.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(100.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = NeonLime)
+                    }
+                } else if (recommendations.isEmpty()) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "Loading related music...",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(16.dp),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                } else {
+                    recommendations.forEach { recTrack ->
+                        TrackCard(
+                            track = recTrack,
+                            isPlaying = false,
+                            onPlay = { onPlayRecommendedTrack(recTrack) },
+                            onFavoriteToggle = { onToggleFavorite(recTrack) },
+                            onAddToQueue = { /* Queued directly */ },
+                            onAddToPlaylist = {},
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }

@@ -20,6 +20,7 @@ import com.example.ui.theme.BrutalDeepBlack
 
 class YouTubeBridge(
     private val onStateChanged: (Boolean) -> Unit,
+    private val onBufferingChanged: (Boolean) -> Unit = {},
     private val onTimeProgress: (Float, Float) -> Unit,
     private val onTrackEnded: () -> Unit,
     private val onErrorOccurred: (Int) -> Unit
@@ -30,6 +31,7 @@ class YouTubeBridge(
     fun onReady() {
         mainHandler.post {
             onStateChanged(true)
+            onBufferingChanged(false)
         }
     }
 
@@ -37,13 +39,22 @@ class YouTubeBridge(
     fun onStateChange(state: Int) {
         mainHandler.post {
             when (state) {
-                1 -> onStateChanged(true)  // PLAYING
-                2 -> onStateChanged(false) // PAUSED
-                0 -> {
-                    onStateChanged(false) // ENDED
+                1 -> { // PLAYING
+                    onStateChanged(true)
+                    onBufferingChanged(false)
+                }
+                2 -> { // PAUSED
+                    onStateChanged(false)
+                    onBufferingChanged(false)
+                }
+                3 -> { // BUFFERING
+                    onBufferingChanged(true)
+                }
+                0 -> { // ENDED
+                    onStateChanged(false)
+                    onBufferingChanged(false)
                     onTrackEnded()
                 }
-                3 -> { /* BUFFERING */ }
             }
         }
     }
@@ -58,6 +69,7 @@ class YouTubeBridge(
     @JavascriptInterface
     fun onError(code: Int) {
         mainHandler.post {
+            onBufferingChanged(false)
             onErrorOccurred(code)
         }
     }
@@ -71,6 +83,7 @@ fun YouTubePlayerView(
     volume: Float,
     seekToSeconds: Float?,
     onStateChanged: (Boolean) -> Unit,
+    onBufferingChanged: (Boolean) -> Unit = {},
     onTimeProgress: (Float, Float) -> Unit,
     onTrackEnded: () -> Unit,
     onError: (Int) -> Unit,
@@ -120,6 +133,7 @@ fun YouTubePlayerView(
                     initialVideoId = videoId,
                     bridge = YouTubeBridge(
                         onStateChanged = onStateChanged,
+                        onBufferingChanged = onBufferingChanged,
                         onTimeProgress = onTimeProgress,
                         onTrackEnded = onTrackEnded,
                         onErrorOccurred = onError
@@ -199,6 +213,8 @@ private fun buildYouTubeHtml(videoId: String): String = """
   <script src="https://www.youtube.com/iframe_api"></script>
   <script>
     var player;
+    var progressInterval = null;
+
     function onYouTubeIframeAPIReady() {
       player = new YT.Player('player', {
         videoId: '$videoId',
@@ -221,6 +237,32 @@ private fun buildYouTubeHtml(videoId: String): String = """
       });
     }
 
+    function startProgressLoop() {
+      if (progressInterval) return;
+      progressInterval = setInterval(function() {
+        try {
+          if (player && typeof player.getPlayerState === 'function') {
+            var state = player.getPlayerState();
+            // ONLY report progress when actively PLAYING (state === 1)
+            if (state === 1 && typeof player.getCurrentTime === 'function' && typeof player.getDuration === 'function') {
+              var cur = player.getCurrentTime();
+              var dur = player.getDuration();
+              if (window.AndroidBridge && dur > 0) {
+                window.AndroidBridge.onProgress(cur, dur);
+              }
+            }
+          }
+        } catch(e) {}
+      }, 250);
+    }
+
+    function stopProgressLoop() {
+      if (progressInterval) {
+        clearInterval(progressInterval);
+        progressInterval = null;
+      }
+    }
+
     function onPlayerReady(event) {
       if (window.AndroidBridge) {
         window.AndroidBridge.onReady();
@@ -231,28 +273,23 @@ private fun buildYouTubeHtml(videoId: String): String = """
     }
 
     function onPlayerStateChange(event) {
+      var state = event.data;
+      if (state === 1) {
+        startProgressLoop();
+      } else {
+        stopProgressLoop();
+      }
       if (window.AndroidBridge) {
-        window.AndroidBridge.onStateChange(event.data);
+        window.AndroidBridge.onStateChange(state);
       }
     }
 
     function onPlayerError(event) {
+      stopProgressLoop();
       if (window.AndroidBridge) {
         window.AndroidBridge.onError(event.data);
       }
     }
-
-    setInterval(function() {
-      try {
-        if (player && player.getCurrentTime && player.getDuration) {
-          var cur = player.getCurrentTime();
-          var dur = player.getDuration();
-          if (window.AndroidBridge && dur > 0) {
-            window.AndroidBridge.onProgress(cur, dur);
-          }
-        }
-      } catch(e) {}
-    }, 500);
 
     function playTrack(vid) {
       try {
@@ -263,6 +300,7 @@ private fun buildYouTubeHtml(videoId: String): String = """
     }
 
     function pauseVideo() {
+      stopProgressLoop();
       try {
         if (player && player.pauseVideo) {
           player.pauseVideo();

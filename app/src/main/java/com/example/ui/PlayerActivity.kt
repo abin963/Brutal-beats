@@ -22,9 +22,13 @@ class PlayerActivity : ComponentActivity() {
         setContent {
             BrutalBeatsTheme {
                 val playerState by viewModel.playerState.collectAsStateWithLifecycle()
+                val recommendations by viewModel.recommendations.collectAsStateWithLifecycle()
+                val isLoadingRecommendations by viewModel.isLoadingRecommendations.collectAsStateWithLifecycle()
 
                 NowPlayingScreen(
                     playerState = playerState,
+                    recommendations = recommendations,
+                    isLoadingRecommendations = isLoadingRecommendations,
                     onPlayPause = { viewModel.togglePlayPause() },
                     onNext = { viewModel.nextTrack() },
                     onPrevious = { viewModel.previousTrack() },
@@ -38,11 +42,16 @@ class PlayerActivity : ComponentActivity() {
                     onRemoveFromQueue = { viewModel.removeFromQueue(it) },
                     onClearQueue = { viewModel.clearQueue() },
                     onPlayQueueItem = { viewModel.playTrack(it) },
+                    onPlayRecommendedTrack = { viewModel.playTrack(it) },
+                    onToggleVideoMode = { viewModel.toggleVideoMode() },
                     onMinimize = { finish() },
                     onStateChanged = { isPlaying ->
                         if (isPlaying != playerState.isPlaying) {
-                            viewModel.togglePlayPause()
+                            viewModel.setPlayingState(isPlaying)
                         }
+                    },
+                    onBufferingChanged = { isBuffering ->
+                        viewModel.setBufferingState(isBuffering)
                     },
                     onTimeProgress = { cur, dur ->
                         viewModel.onPlayerProgress(cur, dur)

@@ -1,10 +1,14 @@
 package com.example.ui.components
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -14,8 +18,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
@@ -28,18 +34,25 @@ import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.NeonLime
+import com.example.ui.theme.NeonPink
 
 object ThumbnailUtils {
     /**
      * Resolves the most reliable high-resolution thumbnail URL.
      */
     fun resolveOptimizedUrl(rawUrl: String?, videoId: String? = null): String {
+        val cleanVid = videoId?.removePrefix("yt:")?.removePrefix("saavn:")?.removePrefix("js:")?.trim()
+
         if (!rawUrl.isNullOrBlank()) {
             var url = rawUrl.trim()
+                .replace("&amp;", "&")
+                .replace("\\\"", "")
+                .replace("\"", "")
+
             if (url.startsWith("http://")) {
                 url = url.replace("http://", "https://")
             }
-            // Upgrade JioSaavn thumbnail resolution
+            // Upgrade JioSaavn thumbnail resolution to 500x500 for crisp artwork
             if (url.contains("jiosaavn") || url.contains("saavn")) {
                 url = url.replace("50x50", "500x500").replace("150x150", "500x500")
             }
@@ -47,12 +60,46 @@ object ThumbnailUtils {
             if (url.contains("img.youtube.com")) {
                 url = url.replace("img.youtube.com", "i.ytimg.com")
             }
+            if (url.startsWith("https://") || url.startsWith("http://")) {
+                return url
+            }
+        }
+
+        // Fallback to YouTube CDN if cleanVid is a standard 11-char videoId
+        if (!cleanVid.isNullOrBlank() && cleanVid.length == 11) {
+            return "https://i.ytimg.com/vi/$cleanVid/hqdefault.jpg"
+        }
+
+        return ""
+    }
+
+    /**
+     * Fallback URL if primary high-res fails (e.g., if 500x500 is 404 on JioSaavn or hqdefault on YouTube).
+     */
+    fun resolveFallbackUrl(rawUrl: String?, videoId: String? = null): String {
+        val cleanVid = videoId?.removePrefix("yt:")?.removePrefix("saavn:")?.removePrefix("js:")?.trim()
+
+        if (!rawUrl.isNullOrBlank()) {
+            var url = rawUrl.trim()
+                .replace("&amp;", "&")
+                .replace("\\\"", "")
+                .replace("\"", "")
+
+            if (url.startsWith("http://")) {
+                url = url.replace("http://", "https://")
+            }
+            // 150x150 is always available on JioSaavn
+            if (url.contains("jiosaavn") || url.contains("saavn")) {
+                return url.replace("500x500", "150x150").replace("50x50", "150x150")
+            }
+            if (url.contains("img.youtube.com")) {
+                return url.replace("img.youtube.com", "i.ytimg.com").replace("maxresdefault", "hqdefault")
+            }
             return url
         }
 
-        // Fallback to YouTube CDN if videoId is provided
-        if (!videoId.isNullOrBlank() && videoId.length == 11) {
-            return "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
+        if (!cleanVid.isNullOrBlank() && cleanVid.length == 11) {
+            return "https://i.ytimg.com/vi/$cleanVid/mqdefault.jpg"
         }
 
         return ""
@@ -71,16 +118,31 @@ fun BrutalThumbnail(
     showSourceBadge: Boolean = true
 ) {
     val context = LocalContext.current
-    val optimizedUrl = remember(imageUrl, videoId) {
-        ThumbnailUtils.resolveOptimizedUrl(imageUrl, videoId)
+    var primaryFailed by remember(imageUrl, videoId) { mutableStateOf(false) }
+
+    val activeUrl = remember(imageUrl, videoId, primaryFailed) {
+        if (!primaryFailed) {
+            val primary = ThumbnailUtils.resolveOptimizedUrl(imageUrl, videoId)
+            if (primary.isNotBlank()) primary else ThumbnailUtils.resolveFallbackUrl(imageUrl, videoId)
+        } else {
+            ThumbnailUtils.resolveFallbackUrl(imageUrl, videoId)
+        }
     }
 
-    val imageRequest = remember(optimizedUrl) {
+    val imageRequest = remember(activeUrl) {
         ImageRequest.Builder(context)
-            .data(optimizedUrl.ifEmpty { null })
-            .crossfade(200)
+            .data(activeUrl.ifBlank { null })
+            .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+            .crossfade(true)
             .memoryCachePolicy(CachePolicy.ENABLED)
             .diskCachePolicy(CachePolicy.ENABLED)
+            .listener(
+                onError = { _, _ ->
+                    if (!primaryFailed) {
+                        primaryFailed = true
+                    }
+                }
+            )
             .build()
     }
 
@@ -90,54 +152,41 @@ fun BrutalThumbnail(
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .border(borderWidth, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f), shape)
     ) {
-        SubcomposeAsyncImage(
-            model = imageRequest,
-            contentDescription = contentDescription,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize(),
-            loading = {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            },
-            error = {
-                // Highly styled music vinyl fallback card so it NEVER displays blank
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color(0xFF141418)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
+        if (activeUrl.isNotBlank()) {
+            SubcomposeAsyncImage(
+                model = imageRequest,
+                contentDescription = contentDescription,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+                loading = {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.MusicNote,
-                            contentDescription = "Music",
-                            tint = NeonLime,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Text(
-                            text = "BEATS",
-                            fontSize = 8.sp,
-                            fontWeight = FontWeight.Black,
-                            fontFamily = FontFamily.Monospace,
-                            color = Color.White
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp,
+                            color = NeonLime
                         )
                     }
+                },
+                error = {
+                    ArtisticVinylFallback(
+                        title = contentDescription ?: "BRUTAL BEATS",
+                        sourceId = sourceId,
+                        modifier = Modifier.fillMaxSize()
+                    )
                 }
-            }
-        )
+            )
+        } else {
+            ArtisticVinylFallback(
+                title = contentDescription ?: "BRUTAL BEATS",
+                sourceId = sourceId,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
 
         // Source badge overlay if requested
         if (showSourceBadge && !sourceId.isNullOrBlank()) {
@@ -146,16 +195,81 @@ fun BrutalThumbnail(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .background(if (isSaavn) NeonCyan else Color.Black)
-                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                    .padding(horizontal = 5.dp, vertical = 2.dp)
             ) {
                 Text(
                     text = if (isSaavn) "SAAVN" else "YT",
                     color = if (isSaavn) Color.Black else Color.White,
-                    fontSize = 7.sp,
+                    fontSize = 8.sp,
                     fontWeight = FontWeight.Black,
                     fontFamily = FontFamily.Monospace
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun ArtisticVinylFallback(
+    title: String,
+    sourceId: String?,
+    modifier: Modifier = Modifier
+) {
+    val isSaavn = sourceId?.contains("SAAVN", ignoreCase = true) == true
+    val accentColor = if (isSaavn) NeonCyan else NeonLime
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color(0xFF101014)),
+        contentAlignment = Alignment.Center
+    ) {
+        // Subtle concentric vinyl grooves
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val center = Offset(size.width / 2f, size.height / 2f)
+            val maxR = size.minDimension / 2f
+            for (i in 1..4) {
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.04f * i),
+                    radius = maxR * (0.25f + i * 0.15f),
+                    center = center,
+                    style = Stroke(width = 1.2f)
+                )
+            }
+        }
+
+        // Center vinyl label
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.padding(8.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(accentColor.copy(alpha = 0.2f))
+                    .border(1.5.dp, accentColor, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.MusicNote,
+                    contentDescription = null,
+                    tint = accentColor,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = "BRUTAL BEATS",
+                color = Color.White,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Black,
+                fontFamily = FontFamily.Monospace,
+                letterSpacing = 0.5.sp
+            )
         }
     }
 }

@@ -8,6 +8,8 @@ import com.example.data.model.Track
 import com.example.data.remote.GenrePresets
 import com.example.source.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
@@ -72,10 +74,12 @@ class MusicRepository(private val database: AppDatabase) {
         val results = when (sourceMode) {
             PreferredSourceMode.YOUTUBE -> SourceRegistry.getYouTubeSource().search(query)
             PreferredSourceMode.JIOSAAVN -> SourceRegistry.getJioSaavnSource().search(query)
-            PreferredSourceMode.AUTO -> {
-                val ytResults = SourceRegistry.getYouTubeSource().search(query)
-                val saavnResults = SourceRegistry.getJioSaavnSource().search(query)
-                (ytResults + saavnResults).distinctBy { "${it.title.lowercase().trim()}_${it.artist.lowercase().trim()}" }
+            PreferredSourceMode.AUTO -> coroutineScope {
+                val ytDeferred = async { SourceRegistry.getYouTubeSource().search(query) }
+                val saavnDeferred = async { SourceRegistry.getJioSaavnSource().search(query) }
+                val yt = try { ytDeferred.await() } catch (_: Exception) { emptyList() }
+                val saavn = try { saavnDeferred.await() } catch (_: Exception) { emptyList() }
+                (yt + saavn).distinctBy { "${it.title.lowercase().trim()}_${it.artist.lowercase().trim()}" }
             }
         }
 
@@ -99,6 +103,53 @@ class MusicRepository(private val database: AppDatabase) {
             return@withContext track
         }
         null
+    }
+
+    suspend fun fetchRecommendedTracks(
+        currentTrack: Track,
+        sourceMode: PreferredSourceMode = PreferredSourceMode.AUTO
+    ): List<Track> = withContext(Dispatchers.IO) {
+        val cleanArtist = currentTrack.artist
+            .replace(" - Topic", "")
+            .replace("VEVO", "")
+            .replace("Official", "", ignoreCase = true)
+            .trim()
+
+        val cleanTitle = currentTrack.title
+            .replace(Regex("\\(.*\\)"), "")
+            .replace(Regex("\\[.*\\]"), "")
+            .trim()
+
+        val candidateList = mutableListOf<Track>()
+
+        coroutineScope {
+            val artistDeferred = if (cleanArtist.isNotBlank() && cleanArtist != "YOUTUBE" && cleanArtist != "ARTIST") {
+                async { search("$cleanArtist hits", sourceMode) }
+            } else null
+
+            val titleDeferred = if (cleanTitle.isNotBlank()) {
+                async { search("$cleanTitle similar songs", sourceMode) }
+            } else null
+
+            val genreDeferred = if (currentTrack.genre.isNotBlank() && currentTrack.genre != "GENERAL") {
+                async { fetchGenreTracks(currentTrack.genre, sourceMode) }
+            } else null
+
+            artistDeferred?.await()?.let { candidateList.addAll(it) }
+            titleDeferred?.await()?.let { candidateList.addAll(it) }
+            genreDeferred?.await()?.let { candidateList.addAll(it) }
+        }
+
+        // Filter out the currently playing track and duplicates
+        val filtered = candidateList
+            .filter { it.videoId != currentTrack.videoId && it.title.isNotBlank() }
+            .distinctBy { "${it.title.lowercase().trim()}_${it.artist.lowercase().trim()}" }
+            .take(15)
+
+        if (filtered.isNotEmpty()) {
+            trackDao.insertTracks(filtered.map { TrackEntity.fromTrack(it) })
+        }
+        filtered
     }
 
     suspend fun toggleFavorite(track: Track): Boolean = withContext(Dispatchers.IO) {
