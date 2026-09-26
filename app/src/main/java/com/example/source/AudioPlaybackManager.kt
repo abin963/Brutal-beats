@@ -43,7 +43,7 @@ class AudioPlaybackManager(context: Context) {
         }
     }
 
-    fun playDirectStream(url: String, onCompletion: () -> Unit) {
+    fun playDirectStream(url: String, onCompletion: () -> Unit, onError: ((Int) -> Unit)? = null) {
         stop()
         onCompletionCallback = onCompletion
         try {
@@ -66,9 +66,10 @@ class AudioPlaybackManager(context: Context) {
                     stopProgressLoop()
                     onCompletionCallback?.invoke()
                 }
-                setOnErrorListener { _, _, _ ->
+                setOnErrorListener { _, what, _ ->
                     _isDirectPlaying.value = false
                     stopProgressLoop()
+                    onError?.invoke(what)
                     false
                 }
                 prepareAsync()
@@ -76,6 +77,7 @@ class AudioPlaybackManager(context: Context) {
             mediaPlayer = mp
         } catch (_: Exception) {
             _isDirectPlaying.value = false
+            onError?.invoke(-1)
         }
     }
 

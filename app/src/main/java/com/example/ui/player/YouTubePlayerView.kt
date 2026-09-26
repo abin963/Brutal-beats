@@ -214,10 +214,13 @@ private fun buildYouTubeHtml(videoId: String): String = """
   <script>
     var player;
     var progressInterval = null;
+    var currentVid = '$videoId';
+    var pendingVid = null;
 
     function onYouTubeIframeAPIReady() {
+      var initialVid = pendingVid || currentVid;
       player = new YT.Player('player', {
-        videoId: '$videoId',
+        videoId: initialVid,
         playerVars: {
           'autoplay': 1,
           'playsinline': 1,
@@ -235,6 +238,7 @@ private fun buildYouTubeHtml(videoId: String): String = """
           'onError': onPlayerError
         }
       });
+      pendingVid = null;
     }
 
     function startProgressLoop() {
@@ -268,7 +272,12 @@ private fun buildYouTubeHtml(videoId: String): String = """
         window.AndroidBridge.onReady();
       }
       try {
-        event.target.playVideo();
+        if (pendingVid) {
+          event.target.loadVideoById(pendingVid);
+          pendingVid = null;
+        } else {
+          event.target.playVideo();
+        }
       } catch(e) {}
     }
 
@@ -292,11 +301,16 @@ private fun buildYouTubeHtml(videoId: String): String = """
     }
 
     function playTrack(vid) {
+      currentVid = vid;
       try {
-        if (player && player.loadVideoById) {
+        if (player && typeof player.loadVideoById === 'function') {
           player.loadVideoById(vid);
+        } else {
+          pendingVid = vid;
         }
-      } catch(e) {}
+      } catch(e) {
+        pendingVid = vid;
+      }
     }
 
     function pauseVideo() {

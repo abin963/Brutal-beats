@@ -53,6 +53,7 @@ fun NowPlayingScreen(
     onToggleMute: () -> Unit,
     onToggleLoop: () -> Unit,
     onToggleShuffle: () -> Unit,
+    onToggleAutoplay: () -> Unit = {},
     onToggleFavorite: (Track) -> Unit,
     onToggleQueue: () -> Unit,
     onRemoveFromQueue: (Int) -> Unit,
@@ -494,7 +495,48 @@ fun NowPlayingScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Dedicated Autoplay Mode Pill Toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    onClick = onToggleAutoplay,
+                    shape = RoundedCornerShape(20.dp),
+                    color = if (playerState.isAutoplayEnabled) NeonLime.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant,
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.2.dp,
+                        if (playerState.isAutoplayEnabled) NeonLime else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                    ),
+                    modifier = Modifier.testTag("autoplay_toggle_btn")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Bolt,
+                            contentDescription = "Autoplay",
+                            tint = if (playerState.isAutoplayEnabled) NeonLime else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (playerState.isAutoplayEnabled) "AUTOPLAY ON" else "AUTOPLAY OFF",
+                            color = if (playerState.isAutoplayEnabled) NeonLime else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            letterSpacing = 0.5.sp
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
 
             // Volume & Queue Toggles
             Row(
@@ -555,8 +597,18 @@ fun NowPlayingScreen(
                             fontFamily = FontFamily.Monospace
                         )
 
-                        TextButton(onClick = onClearQueue) {
-                            Text("Clear", color = NeonLime, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(onClick = onToggleAutoplay) {
+                                Text(
+                                    text = if (playerState.isAutoplayEnabled) "⚡ AUTOPLAY ON" else "AUTOPLAY OFF",
+                                    color = if (playerState.isAutoplayEnabled) NeonLime else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            TextButton(onClick = onClearQueue) {
+                                Text("Clear", color = NeonLime, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
 

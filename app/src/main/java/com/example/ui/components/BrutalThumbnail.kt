@@ -152,40 +152,46 @@ fun BrutalThumbnail(
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .border(borderWidth, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f), shape)
     ) {
-        if (activeUrl.isNotBlank()) {
-            SubcomposeAsyncImage(
-                model = imageRequest,
-                contentDescription = contentDescription,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-                loading = {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            strokeWidth = 2.dp,
-                            color = NeonLime
+        Crossfade(
+            targetState = activeUrl,
+            animationSpec = androidx.compose.animation.core.tween(220),
+            label = "thumbnail_crossfade"
+        ) { url ->
+            if (url.isNotBlank()) {
+                SubcomposeAsyncImage(
+                    model = imageRequest,
+                    contentDescription = contentDescription,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                    loading = {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp,
+                                color = NeonLime
+                            )
+                        }
+                    },
+                    error = {
+                        ArtisticVinylFallback(
+                            title = contentDescription ?: "BRUTAL BEATS",
+                            sourceId = sourceId,
+                            modifier = Modifier.fillMaxSize()
                         )
                     }
-                },
-                error = {
-                    ArtisticVinylFallback(
-                        title = contentDescription ?: "BRUTAL BEATS",
-                        sourceId = sourceId,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-            )
-        } else {
-            ArtisticVinylFallback(
-                title = contentDescription ?: "BRUTAL BEATS",
-                sourceId = sourceId,
-                modifier = Modifier.fillMaxSize()
-            )
+                )
+            } else {
+                ArtisticVinylFallback(
+                    title = contentDescription ?: "BRUTAL BEATS",
+                    sourceId = sourceId,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         }
 
         // Source badge overlay if requested

@@ -101,14 +101,18 @@ fun BrutalBeatsApp(
                         viewModel.onTrackFinished()
                     },
                     onError = {
-                        viewModel.showMessage("PLAYBACK ERROR (CODE $it)")
+                        viewModel.onPlaybackError(it)
                     },
                     modifier = Modifier.fillMaxSize()
                 )
             }
         }
 
-        if (playerState.isPlayerExpanded) {
+        AnimatedVisibility(
+            visible = playerState.isPlayerExpanded,
+            enter = slideInVertically(initialOffsetY = { it }, animationSpec = androidx.compose.animation.core.tween(260)) + fadeIn(animationSpec = androidx.compose.animation.core.tween(200)),
+            exit = slideOutVertically(targetOffsetY = { it }, animationSpec = androidx.compose.animation.core.tween(240)) + fadeOut(animationSpec = androidx.compose.animation.core.tween(180))
+        ) {
             // Fullscreen Now Playing screen
             NowPlayingScreen(
                 playerState = playerState,
@@ -122,6 +126,7 @@ fun BrutalBeatsApp(
                 onToggleMute = { viewModel.toggleMute() },
                 onToggleLoop = { viewModel.toggleLoop() },
                 onToggleShuffle = { viewModel.toggleShuffle() },
+                onToggleAutoplay = { viewModel.toggleAutoplay() },
                 onToggleFavorite = { viewModel.toggleFavorite(it) },
                 onToggleQueue = { viewModel.toggleQueueVisibility() },
                 onRemoveFromQueue = { viewModel.removeFromQueue(it) },
@@ -148,10 +153,12 @@ fun BrutalBeatsApp(
                     viewModel.onTrackFinished()
                 },
                 onError = {
-                    viewModel.showMessage("PLAYBACK ERROR (CODE $it)")
+                    viewModel.onPlaybackError(it)
                 }
             )
-        } else {
+        }
+
+        if (!playerState.isPlayerExpanded) {
             // Main App Layout
             Scaffold(
                 modifier = Modifier.fillMaxSize(),

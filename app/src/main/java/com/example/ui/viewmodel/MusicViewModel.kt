@@ -1,14 +1,18 @@
 package com.example.ui.viewmodel
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import coil.Coil
+import coil.request.ImageRequest
 import com.example.data.local.AppDatabase
 import com.example.data.local.PlaylistEntity
 import com.example.data.model.Track
 import com.example.data.repository.MusicRepository
 import com.example.data.remote.YouTubeSearchService
 import com.example.source.*
+import com.example.ui.components.ThumbnailUtils
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -37,6 +41,7 @@ data class PlayerUiState(
     val isMuted: Boolean = false,
     val isLooping: Boolean = false,
     val isShuffling: Boolean = false,
+    val isAutoplayEnabled: Boolean = true,
     val seekTargetSec: Float? = null,
     val queue: List<Track> = emptyList(),
     val queueIndex: Int = 0,
@@ -67,8 +72,15 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = MusicRepository(AppDatabase.getInstance(application))
     private val audioPlaybackManager = AudioPlaybackManager(application)
+    private val prefs = application.getSharedPreferences("brutal_beats_preferences", Context.MODE_PRIVATE)
 
-    private val _playerState = MutableStateFlow(PlayerUiState())
+    companion object {
+        private const val KEY_AUTOPLAY = "is_autoplay_enabled"
+    }
+
+    private val _playerState = MutableStateFlow(
+        PlayerUiState(isAutoplayEnabled = prefs.getBoolean(KEY_AUTOPLAY, true))
+    )
     val playerState: StateFlow<PlayerUiState> = _playerState.asStateFlow()
 
     private val _uiState = MutableStateFlow(BrutalUiState())
@@ -90,12 +102,22 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     val isLoadingRecommendations: StateFlow<Boolean> = _isLoadingRecommendations.asStateFlow()
 
     private val recommendationsCache = mutableMapOf<String, List<Track>>()
+    private val recentlyAutoplayedIds = LinkedHashSet<String>()
+
     private var recommendationJob: Job? = null
     private var searchJob: Job? = null
     private var suggestionJob: Job? = null
     private var genreJob: Job? = null
+    private var autoplayJob: Job? = null
+
     private var lastSeekTimestamp = 0L
     private var targetSeekSec = -1f
+
+    private var lastCompletedTrackId: String? = null
+    private var lastCompletedTimestamp = 0L
+    private var consecutiveFailures = 0
+    private var preloadedMedia: ResolvedMedia? = null
+    private var isAdvancingAutoplay = false
 
     init {
         // Collect direct audio progress from AudioPlaybackManager
@@ -127,6 +149,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             audioPlaybackManager.isDirectPlaying.collect { playing ->
                 if (_playerState.value.playbackType == PlaybackType.DIRECT_AUDIO) {
+                    if (playing) consecutiveFailures = 0
                     _playerState.update { it.copy(isPlaying = playing, isBuffering = false) }
                 }
             }
@@ -152,6 +175,13 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         _playerState.value.currentTrack?.let { track ->
             playTrack(track)
         }
+    }
+
+    fun toggleAutoplay() {
+        val newState = !_playerState.value.isAutoplayEnabled
+        _playerState.update { it.copy(isAutoplayEnabled = newState) }
+        prefs.edit().putBoolean(KEY_AUTOPLAY, newState).apply()
+        showMessage(if (newState) "AUTOPLAY: ON" else "AUTOPLAY: OFF")
     }
 
     fun selectGenre(genre: String) {
@@ -203,6 +233,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         if (cached != null && cached.isNotEmpty()) {
             _recommendations.value = cached
             _isLoadingRecommendations.value = false
+            preloadNextTrackFromList(cached, track.videoId)
             return
         }
 
@@ -213,17 +244,57 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             recommendationsCache[track.videoId] = recs
             _recommendations.value = recs
             _isLoadingRecommendations.value = false
+            preloadNextTrackFromList(recs, track.videoId)
+        }
+    }
+
+    private fun preloadNextTrackFromList(list: List<Track>, currentId: String) {
+        val candidate = list.firstOrNull { it.videoId != currentId && it.videoId !in recentlyAutoplayedIds }
+            ?: list.firstOrNull { it.videoId != currentId }
+        if (candidate != null) {
+            preloadNextTrack(candidate)
+        }
+    }
+
+    private fun preloadNextTrack(nextTrack: Track) {
+        viewModelScope.launch {
+            try {
+                // 1. Preload thumbnail into Coil cache
+                val thumbUrl = ThumbnailUtils.resolveOptimizedUrl(nextTrack.thumbnailUrl, nextTrack.videoId)
+                if (thumbUrl.isNotBlank()) {
+                    val request = ImageRequest.Builder(getApplication())
+                        .data(thumbUrl)
+                        .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                        .build()
+                    Coil.imageLoader(getApplication()).enqueue(request)
+                }
+                // 2. Pre-resolve stream media metadata
+                if (preloadedMedia?.track?.externalId != nextTrack.videoId) {
+                    preloadedMedia = repository.resolveMedia(nextTrack, _playerState.value.preferredSourceMode)
+                }
+            } catch (_: Exception) {}
         }
     }
 
     fun playTrack(track: Track, newQueue: List<Track>? = null) {
+        autoplayJob?.cancel()
+        targetSeekSec = -1f
+        lastSeekTimestamp = System.currentTimeMillis() + 400
+
         viewModelScope.launch {
             repository.recordPlayed(track)
             val isFav = repository.isFavorite(track.videoId)
             val updatedTrack = track.copy(isFavorite = isFav)
 
-            // Resolve through SourceResolver
-            val resolved = repository.resolveMedia(updatedTrack, _playerState.value.preferredSourceMode)
+            // Use preloaded media if already resolved for this track
+            val resolved = if (preloadedMedia != null && preloadedMedia?.track?.externalId == track.videoId) {
+                val media = preloadedMedia!!
+                preloadedMedia = null
+                media
+            } else {
+                repository.resolveMedia(updatedTrack, _playerState.value.preferredSourceMode)
+            }
+
             val initialDuration = parseDurationSeconds(updatedTrack.duration)
 
             _playerState.update { current ->
@@ -238,7 +309,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     queue = q,
                     queueIndex = idx,
                     currentPositionSec = 0f,
-                    totalDurationSec = if (initialDuration > 0f) initialDuration else current.totalDurationSec,
+                    totalDurationSec = if (initialDuration > 0f) initialDuration else 0f,
                     seekTargetSec = 0f
                 )
             }
@@ -248,14 +319,16 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
             // Direct audio playback vs YouTube IFrame playback
             if (resolved.playbackType == PlaybackType.DIRECT_AUDIO && !resolved.streamUrl.isNullOrBlank()) {
-                audioPlaybackManager.playDirectStream(resolved.streamUrl) {
-                    onTrackFinished()
-                }
+                audioPlaybackManager.playDirectStream(
+                    url = resolved.streamUrl,
+                    onCompletion = { onTrackFinished() },
+                    onError = { onPlaybackError(it) }
+                )
             } else {
                 audioPlaybackManager.stop()
             }
 
-            showMessage("RESOLVED: [${resolved.sourceName.uppercase()}] ${resolved.resolutionNote}")
+            showMessage("NOW PLAYING: [${resolved.sourceName.uppercase()}] ${updatedTrack.title.take(24)}")
         }
     }
 
@@ -275,6 +348,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setPlayingState(isPlaying: Boolean) {
+        if (isPlaying) {
+            consecutiveFailures = 0
+        }
         _playerState.update { it.copy(isPlaying = isPlaying, isBuffering = false) }
     }
 
@@ -287,16 +363,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun nextTrack() {
-        val current = _playerState.value
-        if (current.queue.isEmpty()) return
-
-        val nextIndex = if (current.isShuffling) {
-            current.queue.indices.random()
-        } else {
-            (current.queueIndex + 1) % current.queue.size
-        }
-        val next = current.queue[nextIndex]
-        playTrack(next)
+        advanceToNextTrackOrAutoplay()
     }
 
     fun previousTrack() {
@@ -415,16 +482,126 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onTrackFinished() {
-        if (_playerState.value.isLooping) {
+        val current = _playerState.value
+        val track = current.currentTrack ?: return
+
+        // 1. Loop check
+        if (current.isLooping) {
             seekTo(0f)
             _playerState.update { it.copy(isPlaying = true) }
-            if (_playerState.value.playbackType == PlaybackType.DIRECT_AUDIO) {
-                _playerState.value.resolvedMedia?.streamUrl?.let { url ->
-                    audioPlaybackManager.playDirectStream(url) { onTrackFinished() }
+            if (current.playbackType == PlaybackType.DIRECT_AUDIO) {
+                current.resolvedMedia?.streamUrl?.let { url ->
+                    audioPlaybackManager.playDirectStream(
+                        url = url,
+                        onCompletion = { onTrackFinished() },
+                        onError = { onPlaybackError(it) }
+                    )
                 }
             }
+            return
+        }
+
+        // 2. Autoplay setting check
+        if (!current.isAutoplayEnabled) {
+            _playerState.update { it.copy(isPlaying = false, currentPositionSec = 0f) }
+            audioPlaybackManager.stop()
+            showMessage("AUTOPLAY OFF: PLAYBACK STOPPED")
+            return
+        }
+
+        // 3. Prevent duplicate completion triggers for the same song within 1.5 seconds
+        val now = System.currentTimeMillis()
+        if (track.videoId == lastCompletedTrackId && now - lastCompletedTimestamp < 1500L) {
+            return
+        }
+        lastCompletedTrackId = track.videoId
+        lastCompletedTimestamp = now
+
+        // 4. Trigger intelligent autoplay transition
+        advanceToNextTrackOrAutoplay()
+    }
+
+    fun advanceToNextTrackOrAutoplay() {
+        val current = _playerState.value
+        val currentTrack = current.currentTrack ?: return
+        if (isAdvancingAutoplay) return
+        isAdvancingAutoplay = true
+
+        autoplayJob?.cancel()
+        autoplayJob = viewModelScope.launch {
+            try {
+                // Step A: Check if the queue contains upcoming tracks
+                val nextQueueIndex = current.queueIndex + 1
+                if (nextQueueIndex in current.queue.indices) {
+                    val nextTrack = if (current.isShuffling) {
+                        val remaining = current.queue.drop(nextQueueIndex)
+                        remaining.random()
+                    } else {
+                        current.queue[nextQueueIndex]
+                    }
+                    playTrack(nextTrack)
+                    return@launch
+                }
+
+                // Step B: Queue is finished/single track. Pull from loaded recommendations
+                val unplayedRecs = _recommendations.value.filter {
+                    it.videoId != currentTrack.videoId && it.videoId !in recentlyAutoplayedIds
+                }
+                if (unplayedRecs.isNotEmpty()) {
+                    val chosen = unplayedRecs.first()
+                    recentlyAutoplayedIds.add(chosen.videoId)
+                    if (recentlyAutoplayedIds.size > 50) {
+                        recentlyAutoplayedIds.remove(recentlyAutoplayedIds.first())
+                    }
+                    val updatedQueue = current.queue + unplayedRecs
+                    playTrack(chosen, updatedQueue)
+                    return@launch
+                }
+
+                // Step C: Recommendations empty or exhausted. Fetch fresh related tracks
+                _playerState.update { it.copy(isBuffering = true) }
+                val freshRecs = repository.fetchRecommendedTracks(currentTrack, _playerState.value.preferredSourceMode)
+                val validCandidate = freshRecs.firstOrNull {
+                    it.videoId != currentTrack.videoId && it.videoId !in recentlyAutoplayedIds
+                } ?: freshRecs.firstOrNull { it.videoId != currentTrack.videoId }
+
+                if (validCandidate != null) {
+                    recentlyAutoplayedIds.add(validCandidate.videoId)
+                    if (recentlyAutoplayedIds.size > 50) {
+                        recentlyAutoplayedIds.remove(recentlyAutoplayedIds.first())
+                    }
+                    val updatedQueue = current.queue + freshRecs
+                    playTrack(validCandidate, updatedQueue)
+                    return@launch
+                }
+
+                // Step D: Ultimate fallback: Trending tracks
+                val trending = repository.fetchTrendingTracks(_playerState.value.preferredSourceMode)
+                val trendCandidate = trending.firstOrNull { it.videoId != currentTrack.videoId }
+                if (trendCandidate != null) {
+                    playTrack(trendCandidate, current.queue + trending)
+                } else {
+                    _playerState.update { it.copy(isPlaying = false, isBuffering = false) }
+                    showMessage("AUTOPLAY QUEUE COMPLETED")
+                }
+            } finally {
+                isAdvancingAutoplay = false
+            }
+        }
+    }
+
+    fun onPlaybackError(errorCode: Int) {
+        val current = _playerState.value
+        consecutiveFailures++
+        if (current.isAutoplayEnabled && consecutiveFailures <= 3) {
+            showMessage("TRACK UNAVAILABLE, AUTOPLAYING NEXT...")
+            viewModelScope.launch {
+                delay(350)
+                advanceToNextTrackOrAutoplay()
+            }
         } else {
-            nextTrack()
+            _playerState.update { it.copy(isPlaying = false, isBuffering = false) }
+            showMessage(if (consecutiveFailures > 3) "MULTIPLE PLAYBACK ERRORS - CHECK NETWORK" else "PLAYBACK ERROR (CODE $errorCode)")
         }
     }
 
@@ -501,14 +678,14 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     fun addTrackToPlaylist(playlistId: Long, track: Track) {
         viewModelScope.launch {
             repository.addTrackToPlaylist(playlistId, track)
-            showMessage("TRACK ADDED TO PLAYLIST")
+            showMessage("ADDED TO PLAYLIST")
         }
     }
 
     fun removeTrackFromPlaylist(playlistId: Long, videoId: String) {
         viewModelScope.launch {
             repository.removeTrackFromPlaylist(playlistId, videoId)
-            showMessage("TRACK REMOVED FROM PLAYLIST")
+            showMessage("REMOVED FROM PLAYLIST")
         }
     }
 
@@ -519,19 +696,12 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun removeFromHistory(videoId: String) {
-        viewModelScope.launch {
-            repository.removeFromHistory(videoId)
-            showMessage("REMOVED FROM HISTORY")
-        }
-    }
-
     fun showMessage(msg: String) {
         _uiState.update { it.copy(statusMessage = msg) }
-        viewModelScope.launch {
-            delay(2800)
-            _uiState.update { if (it.statusMessage == msg) it.copy(statusMessage = null) else it }
-        }
+    }
+
+    fun clearMessage() {
+        _uiState.update { it.copy(statusMessage = null) }
     }
 
     override fun onCleared() {
