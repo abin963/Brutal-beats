@@ -22,10 +22,11 @@ enum class MainTab {
     HOME,
     EXPLORE,
     LIBRARY,
+    SEARCH,
     HISTORY;
 
     companion object {
-        val DISCOVER: MainTab get() = HOME
+        val DISCOVER: MainTab get() = EXPLORE
     }
 }
 
