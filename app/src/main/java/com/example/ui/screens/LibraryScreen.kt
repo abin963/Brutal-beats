@@ -2,11 +2,13 @@ package com.example.ui.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -14,17 +16,18 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.local.PlaylistEntity
 import com.example.data.model.Track
-import com.example.ui.components.*
-import com.example.ui.theme.*
+import com.example.ui.components.TrackCard
+import com.example.ui.theme.NeonLime
+import com.example.ui.theme.NeonPink
 
 enum class LibrarySubTab {
     FAVORITES,
@@ -53,19 +56,18 @@ fun LibraryScreen(
     var showCreateDialog by remember { mutableStateOf(false) }
     var newPlaylistName by remember { mutableStateOf("") }
 
-    // If viewing a playlist, BackHandler closes it
     BackHandler(enabled = selectedPlaylist != null) {
         onClosePlaylist()
     }
 
     Column(
         modifier = modifier
-            .fillMaxWidth()
-            .background(BrutalOffWhite)
-            .padding(14.dp)
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 16.dp)
     ) {
-        // If a playlist is opened, show playlist view
         if (selectedPlaylist != null) {
+            // Playlist Detail View
             PlaylistDetailView(
                 playlist = selectedPlaylist,
                 tracks = selectedPlaylistTracks,
@@ -79,341 +81,110 @@ fun LibraryScreen(
                     onRemoveTrackFromPlaylist(selectedPlaylist.id, videoId)
                 }
             )
-            return
-        }
+        } else {
+            Spacer(modifier = Modifier.height(10.dp))
 
-        // Section Title
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "LOCAL LIBRARY",
-                color = BrutalBlack,
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Black,
-                fontFamily = FontFamily.SansSerif,
-                letterSpacing = (-1).sp
-            )
-
-            BrutalBadge(
-                text = "ROOM DB PERSISTENCE",
-                backgroundColor = BrutalYellow,
-                textColor = BrutalBlack
-            )
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // Subtabs
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Box(
+            // Sub-Tabs: [Favorites] [Playlists]
+            Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .border(2.5.dp, BrutalBlack)
-                    .background(if (subTab == LibrarySubTab.FAVORITES) BrutalBlack else BrutalWhite)
-                    .clickable { subTab = LibrarySubTab.FAVORITES }
-                    .padding(vertical = 8.dp)
-                    .testTag("subtab_favorites"),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(4.dp)
             ) {
-                Text(
-                    text = "FAVORITES (${favorites.size})",
-                    color = if (subTab == LibrarySubTab.FAVORITES) BrutalYellow else BrutalBlack,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Black,
-                    fontFamily = FontFamily.Monospace
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .border(2.5.dp, BrutalBlack)
-                    .background(if (subTab == LibrarySubTab.PLAYLISTS) BrutalBlack else BrutalWhite)
-                    .clickable { subTab = LibrarySubTab.PLAYLISTS }
-                    .padding(vertical = 8.dp)
-                    .testTag("subtab_playlists"),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "PLAYLISTS (${playlists.size})",
-                    color = if (subTab == LibrarySubTab.PLAYLISTS) BrutalYellow else BrutalBlack,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Black,
-                    fontFamily = FontFamily.Monospace
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        when (subTab) {
-            LibrarySubTab.FAVORITES -> {
-                if (favorites.isEmpty()) {
-                    BrutalCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        backgroundColor = BrutalWhite,
-                        borderWidth = 3.dp,
-                        shadowOffset = 4.dp
+                LibrarySubTab.entries.forEach { tab ->
+                    val isSelected = subTab == tab
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (isSelected) NeonLime else Color.Transparent)
+                            .clickable { subTab = tab }
+                            .padding(vertical = 10.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Column(
-                            modifier = Modifier.padding(20.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = "NO FAVORITES LOGGED",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Black,
-                                fontFamily = FontFamily.SansSerif,
-                                color = BrutalBlack
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = "TAP THE HEART ICON ON ANY TRACK CARD TO STORE IT LOCALLY IN ROOM DB.",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace,
-                                color = Color(0xFF666666)
-                            )
-                        }
-                    }
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        favorites.forEachIndexed { index, track ->
-                            TrackCard(
-                                track = track,
-                                onPlay = { onPlayTrack(track, favorites) },
-                                onFavoriteToggle = { onFavoriteToggle(track) },
-                                onAddToQueue = { onAddToQueue(track) },
-                                isPlaying = currentPlayingVideoId == track.videoId && isPlaying,
-                                trackIndex = index + 1
-                            )
-                        }
+                        Text(
+                            text = if (tab == LibrarySubTab.FAVORITES) "Favorites (${favorites.size})" else "Playlists (${playlists.size})",
+                            color = if (isSelected) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                            fontSize = 13.sp
+                        )
                     }
                 }
             }
 
-            LibrarySubTab.PLAYLISTS -> {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    // Create Playlist Button
-                    BrutalButton(
-                        onClick = { showCreateDialog = true },
-                        modifier = Modifier.fillMaxWidth(),
-                        backgroundColor = BrutalYellow,
-                        testTag = "create_playlist_btn"
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "Create",
-                            tint = BrutalBlack,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "CREATE NEW PLAYLIST",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Black,
-                            fontFamily = FontFamily.Monospace,
-                            color = BrutalBlack
-                        )
-                    }
+            Spacer(modifier = Modifier.height(14.dp))
 
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    if (playlists.isEmpty()) {
-                        BrutalCard(
-                            modifier = Modifier.fillMaxWidth(),
-                            backgroundColor = BrutalWhite,
-                            borderWidth = 3.dp,
-                            shadowOffset = 4.dp
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(20.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text(
-                                    text = "NO PLAYLISTS YET",
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Black,
-                                    fontFamily = FontFamily.SansSerif,
-                                    color = BrutalBlack
-                                )
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = "CREATE CUSTOM INDUSTRIAL MIXES & RECTANGULAR SOUND BOARDS.",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = Color(0xFF666666)
-                                )
-                            }
-                        }
-                    } else {
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            playlists.forEach { playlist ->
-                                BrutalCard(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { onOpenPlaylist(playlist) },
-                                    backgroundColor = BrutalWhite,
-                                    borderWidth = 3.dp,
-                                    shadowOffset = 4.dp
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(14.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                BrutalBadge(
-                                                    text = "PLAYLIST",
-                                                    backgroundColor = BrutalBlack,
-                                                    textColor = BrutalWhite
-                                                )
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text(
-                                                    text = playlist.name,
-                                                    fontSize = 16.sp,
-                                                    fontWeight = FontWeight.Black,
-                                                    fontFamily = FontFamily.SansSerif,
-                                                    color = BrutalBlack
-                                                )
-                                            }
-
-                                            Spacer(modifier = Modifier.height(4.dp))
-                                            Text(
-                                                text = "TAP TO VIEW TRACKS & PLAY",
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                fontFamily = FontFamily.Monospace,
-                                                color = Color(0xFF555555)
-                                            )
-                                        }
-
-                                        IconButton(
-                                            onClick = { onDeletePlaylist(playlist.id) },
-                                            modifier = Modifier
-                                                .size(36.dp)
-                                                .border(2.dp, BrutalBlack)
-                                                .background(BrutalWhite)
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Delete,
-                                                contentDescription = "Delete",
-                                                tint = Color(0xFFCC0000),
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+            when (subTab) {
+                LibrarySubTab.FAVORITES -> {
+                    FavoritesList(
+                        favorites = favorites,
+                        currentPlayingVideoId = currentPlayingVideoId,
+                        isPlaying = isPlaying,
+                        onPlayTrack = onPlayTrack,
+                        onFavoriteToggle = onFavoriteToggle,
+                        onAddToQueue = onAddToQueue
+                    )
+                }
+                LibrarySubTab.PLAYLISTS -> {
+                    PlaylistsList(
+                        playlists = playlists,
+                        onOpenPlaylist = onOpenPlaylist,
+                        onCreatePlaylistClick = { showCreateDialog = true },
+                        onDeletePlaylist = onDeletePlaylist
+                    )
                 }
             }
         }
     }
 
-    // Create Playlist Dialog
     if (showCreateDialog) {
         AlertDialog(
-            onDismissRequest = { showCreateDialog = false },
-            containerColor = BrutalWhite,
-            shape = androidx.compose.ui.graphics.RectangleShape,
-            modifier = Modifier.border(3.5.dp, BrutalBlack),
+            onDismissRequest = {
+                showCreateDialog = false
+                newPlaylistName = ""
+            },
             title = {
                 Text(
-                    text = "NEW BRUTAL PLAYLIST",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Black,
-                    fontFamily = FontFamily.Monospace,
-                    color = BrutalBlack
+                    text = "New Playlist",
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             },
             text = {
-                Column {
-                    Text(
-                        text = "ENTER PLAYLIST TITLE:",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace,
-                        color = Color(0xFF444444)
+                OutlinedTextField(
+                    value = newPlaylistName,
+                    onValueChange = { newPlaylistName = it },
+                    label = { Text("Playlist Name") },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = NeonLime,
+                        cursorColor = NeonLime
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    TextField(
-                        value = newPlaylistName,
-                        onValueChange = { newPlaylistName = it },
-                        singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(2.dp, BrutalBlack)
-                            .testTag("playlist_name_input"),
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = BrutalOffWhite,
-                            unfocusedContainerColor = BrutalOffWhite,
-                            cursorColor = BrutalBlack,
-                            focusedTextColor = BrutalBlack,
-                            unfocusedTextColor = BrutalBlack
-                        ),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(
-                            onDone = {
-                                if (newPlaylistName.isNotBlank()) {
-                                    onCreatePlaylist(newPlaylistName)
-                                    newPlaylistName = ""
-                                    showCreateDialog = false
-                                }
-                            }
-                        )
-                    )
-                }
+                )
             },
             confirmButton = {
-                Box(
-                    modifier = Modifier
-                        .border(2.dp, BrutalBlack)
-                        .background(BrutalYellow)
-                        .clickable {
-                            if (newPlaylistName.isNotBlank()) {
-                                onCreatePlaylist(newPlaylistName)
-                                newPlaylistName = ""
-                                showCreateDialog = false
-                            }
+                Button(
+                    onClick = {
+                        if (newPlaylistName.isNotBlank()) {
+                            onCreatePlaylist(newPlaylistName.trim())
+                            newPlaylistName = ""
+                            showCreateDialog = false
                         }
-                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonLime)
                 ) {
-                    Text(
-                        text = "CREATE",
-                        fontWeight = FontWeight.Black,
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 12.sp,
-                        color = BrutalBlack
-                    )
+                    Text("Create", color = Color.Black, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                Box(
-                    modifier = Modifier
-                        .border(2.dp, BrutalBlack)
-                        .background(BrutalWhite)
-                        .clickable { showCreateDialog = false }
-                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                TextButton(
+                    onClick = {
+                        showCreateDialog = false
+                        newPlaylistName = ""
+                    }
                 ) {
-                    Text(
-                        text = "CANCEL",
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 12.sp,
-                        color = BrutalBlack
-                    )
+                    Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         )
@@ -421,7 +192,238 @@ fun LibraryScreen(
 }
 
 @Composable
-fun PlaylistDetailView(
+private fun FavoritesList(
+    favorites: List<Track>,
+    currentPlayingVideoId: String?,
+    isPlaying: Boolean,
+    onPlayTrack: (Track, List<Track>) -> Unit,
+    onFavoriteToggle: (Track) -> Unit,
+    onAddToQueue: (Track) -> Unit
+) {
+    if (favorites.isEmpty()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(bottom = 96.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    imageVector = Icons.Default.FavoriteBorder,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(54.dp)
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "No Favorites Yet",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Tap the heart icon on any song to save it here.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 13.sp
+                )
+            }
+        }
+    } else {
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(bottom = 96.dp)
+        ) {
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "${favorites.size} SAVED TRACKS",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+
+                    Button(
+                        onClick = { onPlayTrack(favorites.first(), favorites) },
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonLime),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = "Play all",
+                            tint = Color.Black,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Play All", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+                }
+            }
+
+            itemsIndexed(favorites) { index, track ->
+                TrackCard(
+                    track = track,
+                    isPlaying = isPlaying && track.videoId == currentPlayingVideoId,
+                    trackIndex = index + 1,
+                    onPlay = { onPlayTrack(track, favorites) },
+                    onFavoriteToggle = { onFavoriteToggle(track) },
+                    onAddToQueue = { onAddToQueue(track) },
+                    onAddToPlaylist = {}
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlaylistsList(
+    playlists: List<PlaylistEntity>,
+    onOpenPlaylist: (PlaylistEntity) -> Unit,
+    onCreatePlaylistClick: () -> Unit,
+    onDeletePlaylist: (Long) -> Unit
+) {
+    LazyColumn(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(bottom = 96.dp)
+    ) {
+        // Create Playlist Card
+        item {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .clickable(onClick = onCreatePlaylistClick)
+                    .testTag("create_playlist_btn"),
+                color = MaterialTheme.colorScheme.surface,
+                border = androidx.compose.foundation.BorderStroke(1.dp, NeonLime.copy(alpha = 0.5f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(46.dp)
+                            .clip(CircleShape)
+                            .background(NeonLime),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Add Playlist",
+                            tint = Color.Black,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(14.dp))
+
+                    Column {
+                        Text(
+                            text = "Create Playlist",
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Organize your favorite jams",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+        }
+
+        if (playlists.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 40.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "No Custom Playlists",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 14.sp
+                    )
+                }
+            }
+        } else {
+            items(playlists) { playlist ->
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable { onOpenPlaylist(playlist) },
+                    color = MaterialTheme.colorScheme.surface,
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PlaylistPlay,
+                                    contentDescription = null,
+                                    tint = NeonLime,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(12.dp))
+
+                            Column {
+                                Text(
+                                    text = playlist.name,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Tap to view tracks",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+
+                        IconButton(onClick = { onDeletePlaylist(playlist.id) }) {
+                            Icon(
+                                imageVector = Icons.Default.DeleteOutline,
+                                contentDescription = "Delete",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlaylistDetailView(
     playlist: PlaylistEntity,
     tracks: List<Track>,
     currentPlayingVideoId: String?,
@@ -432,111 +434,85 @@ fun PlaylistDetailView(
     onAddToQueue: (Track) -> Unit,
     onRemoveTrack: (String) -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        // Back header
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(
-                onClick = onBack,
-                modifier = Modifier
-                    .size(40.dp)
-                    .border(2.dp, BrutalBlack)
-                    .background(BrutalWhite)
-                    .testTag("playlist_back_button")
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    tint = BrutalBlack
-                )
-            }
-
-            Spacer(modifier = Modifier.width(10.dp))
-
-            Column {
-                BrutalBadge(
-                    text = "CUSTOM PLAYLIST",
-                    backgroundColor = BrutalBlack,
-                    textColor = BrutalWhite
-                )
-                Text(
-                    text = playlist.name,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Black,
-                    fontFamily = FontFamily.SansSerif,
-                    color = BrutalBlack
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        if (tracks.isNotEmpty()) {
-            BrutalButton(
-                onClick = { onPlayTrack(tracks.first(), tracks) },
+    LazyColumn(
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(bottom = 96.dp)
+    ) {
+        item {
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                backgroundColor = BrutalYellow
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Default.PlayArrow,
-                    contentDescription = "Play All",
-                    tint = BrutalBlack,
-                    modifier = Modifier.size(22.dp)
-                )
+                IconButton(onClick = onBack) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
                 Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "PLAY ALL TRACKS (${tracks.size})",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Black,
-                    fontFamily = FontFamily.Monospace,
-                    color = BrutalBlack
-                )
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = playlist.name,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    Text(
+                        text = "${tracks.size} tracks",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp
+                    )
+                }
+
+                if (tracks.isNotEmpty()) {
+                    Button(
+                        onClick = { onPlayTrack(tracks.first(), tracks) },
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonLime),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = "Play all",
+                            tint = Color.Black,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Play", color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
-            Spacer(modifier = Modifier.height(14.dp))
         }
 
         if (tracks.isEmpty()) {
-            BrutalCard(
-                modifier = Modifier.fillMaxWidth(),
-                backgroundColor = BrutalWhite,
-                borderWidth = 3.dp,
-                shadowOffset = 4.dp
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 50.dp),
+                    contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "PLAYLIST IS EMPTY",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Black,
-                        fontFamily = FontFamily.SansSerif,
-                        color = BrutalBlack
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "ADD TRACKS FROM THE DISCOVER OR FAVORITES SECTIONS USING THE '+' ICON.",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace,
-                        color = Color(0xFF666666)
+                        text = "Playlist is Empty\nAdd tracks using the + button on any song",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 13.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
                 }
             }
         } else {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                tracks.forEachIndexed { index, track ->
-                    TrackCard(
-                        track = track,
-                        onPlay = { onPlayTrack(track, tracks) },
-                        onFavoriteToggle = { onFavoriteToggle(track) },
-                        onAddToQueue = { onAddToQueue(track) },
-                        isPlaying = currentPlayingVideoId == track.videoId && isPlaying,
-                        trackIndex = index + 1
-                    )
-                }
+            itemsIndexed(tracks) { index, track ->
+                TrackCard(
+                    track = track,
+                    isPlaying = isPlaying && track.videoId == currentPlayingVideoId,
+                    trackIndex = index + 1,
+                    onPlay = { onPlayTrack(track, tracks) },
+                    onFavoriteToggle = { onFavoriteToggle(track) },
+                    onAddToQueue = { onAddToQueue(track) },
+                    onAddToPlaylist = { onRemoveTrack(track.videoId) }
+                )
             }
         }
     }

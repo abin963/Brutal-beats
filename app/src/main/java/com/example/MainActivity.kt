@@ -10,6 +10,7 @@ import com.example.ui.theme.BrutalBeatsTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.example.ui.theme.ThemeManager.init(this)
         enableEdgeToEdge()
         setContent {
             BrutalBeatsTheme {

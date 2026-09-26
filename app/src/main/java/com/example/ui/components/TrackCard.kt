@@ -1,29 +1,31 @@
 package com.example.ui.components
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import com.example.data.model.Track
-import com.example.ui.theme.*
+import com.example.ui.theme.NeonCyan
+import com.example.ui.theme.NeonLime
+import com.example.ui.theme.NeonPink
 
 @Composable
 fun TrackCard(
@@ -31,228 +33,164 @@ fun TrackCard(
     onPlay: () -> Unit,
     onFavoriteToggle: () -> Unit,
     onAddToQueue: () -> Unit,
-    onAddToPlaylist: (() -> Unit)? = null,
+    onAddToPlaylist: () -> Unit,
+    modifier: Modifier = Modifier,
     isPlaying: Boolean = false,
-    trackIndex: Int? = null,
-    modifier: Modifier = Modifier
+    trackIndex: Int? = null
 ) {
-    BrutalCard(
+    val isSaavn = track.sourceId.contains("SAAVN", ignoreCase = true)
+    val cardBorderColor by animateColorAsState(
+        targetValue = if (isPlaying) NeonLime else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+        label = "border_color"
+    )
+
+    Surface(
         modifier = modifier
             .fillMaxWidth()
+            .clickable(onClick = onPlay)
             .testTag("track_card_${track.videoId}"),
-        backgroundColor = if (isPlaying) BrutalYellow else BrutalWhite,
-        borderColor = BrutalBlack,
-        shadowColor = BrutalBlack,
-        borderWidth = 3.dp,
-        shadowOffset = 4.dp
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = if (isPlaying) 6.dp else 2.dp,
+        shadowElevation = if (isPlaying) 4.dp else 1.dp,
+        border = androidx.compose.foundation.BorderStroke(
+            if (isPlaying) 2.dp else 1.dp,
+            cardBorderColor
+        )
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(10.dp)
+                .padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Number label if provided
-                if (trackIndex != null) {
-                    BrutalTrackNumber(
-                        number = trackIndex,
-                        modifier = Modifier.padding(end = 8.dp),
-                        color = BrutalBlack
-                    )
-                }
+            // Optional Index number
+            if (trackIndex != null) {
+                Text(
+                    text = String.format("%02d", trackIndex),
+                    color = if (isPlaying) NeonLime else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 12.sp,
+                    modifier = Modifier.width(26.dp)
+                )
+            }
 
-                // Thumbnail with brutalist border
-                Box(
-                    modifier = Modifier
-                        .size(width = 86.dp, height = 56.dp)
-                        .border(2.dp, BrutalBlack)
-                        .background(BrutalDeepBlack)
-                ) {
-                    AsyncImage(
-                        model = track.thumbnailUrl,
-                        contentDescription = track.title,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
+            // Reliable Thumbnail
+            BrutalThumbnail(
+                imageUrl = track.thumbnailUrl,
+                videoId = track.videoId,
+                sourceId = track.sourceId,
+                contentDescription = track.title,
+                modifier = Modifier.size(56.dp),
+                shape = RoundedCornerShape(10.dp)
+            )
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            // Track details
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = track.title,
+                    color = if (isPlaying) NeonLime else MaterialTheme.colorScheme.onSurface,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Spacer(modifier = Modifier.height(2.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = track.artist,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Normal,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
-                    // Mini source sticker
+
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    // Pill for source/quality
                     Box(
                         modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .background(if (track.sourceId == "JIOSAAVN") BrutalCyan else BrutalBlack)
-                            .padding(horizontal = 3.dp, vertical = 1.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(
+                                if (isSaavn) NeonCyan.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant
+                            )
+                            .padding(horizontal = 4.dp, vertical = 1.dp)
                     ) {
                         Text(
-                            text = if (track.sourceId == "JIOSAAVN") "SAAVN" else "YT",
-                            color = if (track.sourceId == "JIOSAAVN") BrutalDeepBlack else BrutalWhite,
+                            text = if (isSaavn) "320K" else "YT",
+                            color = if (isSaavn) NeonCyan else MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 8.sp,
-                            fontWeight = FontWeight.Black,
+                            fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace
                         )
                     }
-                }
 
-                Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
 
-                // Track Info
-                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = track.title,
-                        color = BrutalBlack,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Black,
-                        fontFamily = FontFamily.SansSerif,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        text = track.duration,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        fontSize = 10.sp,
+                        fontFamily = FontFamily.Monospace
                     )
-                    Text(
-                        text = track.artist.uppercase(),
-                        color = Color(0xFF333333),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        BrutalBadge(
-                            text = track.genre,
-                            backgroundColor = BrutalBlack,
-                            textColor = BrutalWhite,
-                            borderWidth = 1.dp
-                        )
-                        if (isPlaying) {
-                            BrutalBadge(
-                                text = "PLAYING",
-                                backgroundColor = BrutalOrange,
-                                textColor = BrutalWhite,
-                                borderWidth = 1.dp
-                            )
-                        } else {
-                            Text(
-                                text = track.duration,
-                                fontSize = 10.sp,
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.Bold,
-                                color = BrutalBlack
-                            )
-                        }
-                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-            BrutalDivider(thickness = 2.dp)
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.width(8.dp))
 
-            // Action row
+            // Action Buttons
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "SRC: ${track.sourceId} // ${if (track.sourceId == "JIOSAAVN") "320KBPS DIRECT" else "YOUTUBE STREAM"}",
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace,
-                        color = Color(0xFF444444)
+                // Favorite Button
+                IconButton(
+                    onClick = onFavoriteToggle,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = if (track.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = "Favorite",
+                        tint = if (track.isFavorite) NeonPink else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
                     )
                 }
 
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                // Add to Playlist Button
+                IconButton(
+                    onClick = onAddToPlaylist,
+                    modifier = Modifier.size(36.dp)
                 ) {
-                    // Queue Button
-                    IconButton(
-                        onClick = onAddToQueue,
-                        modifier = Modifier
-                            .size(36.dp)
-                            .border(2.dp, BrutalBlack)
-                            .background(BrutalWhite)
-                            .testTag("queue_btn_${track.videoId}")
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.QueueMusic,
-                            contentDescription = "Add to Queue",
-                            tint = BrutalBlack,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Default.PlaylistAdd,
+                        contentDescription = "Add to playlist",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
 
-                    // Playlist add button
-                    if (onAddToPlaylist != null) {
-                        IconButton(
-                            onClick = onAddToPlaylist,
-                            modifier = Modifier
-                                .size(36.dp)
-                                .border(2.dp, BrutalBlack)
-                                .background(BrutalWhite)
-                                .testTag("playlist_btn_${track.videoId}")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.PlaylistAdd,
-                                contentDescription = "Add to Playlist",
-                                tint = BrutalBlack,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-
-                    // Favorite Button
-                    IconButton(
-                        onClick = onFavoriteToggle,
-                        modifier = Modifier
-                            .size(36.dp)
-                            .border(2.dp, BrutalBlack)
-                            .background(if (track.isFavorite) BrutalPink else BrutalWhite)
-                            .testTag("fav_btn_${track.videoId}")
-                    ) {
-                        Icon(
-                            imageVector = if (track.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                            contentDescription = "Favorite",
-                            tint = if (track.isFavorite) BrutalWhite else BrutalBlack,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-
-                    // Play Button
-                    Box(
-                        modifier = Modifier
-                            .border(2.dp, BrutalBlack)
-                            .background(if (isPlaying) BrutalBlack else BrutalYellow)
-                            .clickable(onClick = onPlay)
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                            .testTag("play_btn_${track.videoId}"),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = if (isPlaying) Icons.Default.VolumeUp else Icons.Default.PlayArrow,
-                                contentDescription = "Play",
-                                tint = if (isPlaying) BrutalYellow else BrutalBlack,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Text(
-                                text = if (isPlaying) "ACTIVE" else "PLAY",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Black,
-                                fontFamily = FontFamily.Monospace,
-                                color = if (isPlaying) BrutalYellow else BrutalBlack
-                            )
-                        }
-                    }
+                // Play / Pause round action button
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(if (isPlaying) NeonLime else MaterialTheme.colorScheme.surfaceVariant)
+                        .clickable(onClick = onPlay),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (isPlaying) "Pause" else "Play",
+                        tint = if (isPlaying) Color.Black else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
         }

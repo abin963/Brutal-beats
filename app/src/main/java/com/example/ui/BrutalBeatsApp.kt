@@ -3,11 +3,9 @@ package com.example.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -15,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
@@ -27,10 +26,11 @@ import com.example.data.model.Track
 import com.example.ui.components.*
 import com.example.ui.player.NowPlayingBottomBar
 import com.example.ui.player.NowPlayingScreen
-import com.example.ui.screens.DiscoverScreen
+import com.example.ui.screens.ExploreScreen
 import com.example.ui.screens.HistoryScreen
+import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.LibraryScreen
-import com.example.ui.theme.*
+import com.example.ui.theme.NeonLime
 import com.example.ui.viewmodel.MainTab
 import com.example.ui.viewmodel.MusicViewModel
 
@@ -48,26 +48,24 @@ fun BrutalBeatsApp(
     var showNewPlaylistInput by remember { mutableStateOf(false) }
     var newPlaylistTitle by remember { mutableStateOf("") }
 
-    val mainScrollState = rememberScrollState()
-
-    // Handle back press when expanded
+    // Handle back press when player is expanded
     BackHandler(enabled = playerState.isPlayerExpanded) {
         viewModel.togglePlayerExpanded()
     }
 
     // Handle back press when searching or in sub-screen
-    BackHandler(enabled = !playerState.isPlayerExpanded && (uiState.searchQuery.isNotBlank() || uiState.activeTab != MainTab.DISCOVER)) {
+    BackHandler(enabled = !playerState.isPlayerExpanded && (uiState.searchQuery.isNotBlank() || uiState.activeTab != MainTab.HOME)) {
         if (uiState.searchQuery.isNotBlank()) {
             viewModel.clearSearch()
-        } else if (uiState.activeTab != MainTab.DISCOVER) {
-            viewModel.selectTab(MainTab.DISCOVER)
+        } else if (uiState.activeTab != MainTab.HOME) {
+            viewModel.selectTab(MainTab.HOME)
         }
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(BrutalOffWhite)
+            .background(MaterialTheme.colorScheme.background)
     ) {
         if (playerState.isPlayerExpanded) {
             // Fullscreen Now Playing screen
@@ -99,18 +97,16 @@ fun BrutalBeatsApp(
                     viewModel.onTrackFinished()
                 },
                 onError = {
-                    viewModel.showMessage("YOUTUBE PLAYER ERROR (CODE $it)")
+                    viewModel.showMessage("PLAYBACK ERROR (CODE $it)")
                 }
             )
         } else {
             // Main App Layout
             Scaffold(
                 modifier = Modifier.fillMaxSize(),
-                containerColor = BrutalOffWhite,
+                containerColor = MaterialTheme.colorScheme.background,
                 topBar = {
                     HeaderSection(
-                        activeTab = uiState.activeTab,
-                        onTabSelected = { viewModel.selectTab(it) },
                         searchQuery = uiState.searchQuery,
                         onSearchQueryChange = { viewModel.updateSearchQuery(it) },
                         onSearchSubmit = { viewModel.performSearch(it) },
@@ -123,7 +119,12 @@ fun BrutalBeatsApp(
                     )
                 },
                 bottomBar = {
-                    Column(modifier = Modifier.navigationBarsPadding()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                    ) {
+                        // Persistent Mini-Player (visible when a track is loaded)
                         NowPlayingBottomBar(
                             currentTrack = playerState.currentTrack,
                             isPlaying = playerState.isPlaying,
@@ -138,23 +139,44 @@ fun BrutalBeatsApp(
                                 playerState.currentPositionSec / playerState.totalDurationSec
                             } else 0f
                         )
+
+                        // Bottom Navigation: HOME / EXPLORE / LIBRARY / HISTORY
+                        BrutalBottomNav(
+                            activeTab = uiState.activeTab,
+                            onTabSelected = { viewModel.selectTab(it) }
+                        )
                     }
                 }
             ) { innerPadding ->
-                Column(
+                Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding)
-                        .verticalScroll(mainScrollState)
                 ) {
                     when (uiState.activeTab) {
-                        MainTab.DISCOVER -> {
-                            DiscoverScreen(
+                        MainTab.HOME -> {
+                            HomeScreen(
                                 tracks = uiState.genreTracks,
                                 isLoadingTracks = uiState.isLoadingGenre,
+                                recentTracks = history,
+                                favoriteTracks = favorites,
                                 searchResults = uiState.searchResults,
                                 isSearching = uiState.isSearching,
                                 searchQuery = uiState.searchQuery,
+                                currentPlayingVideoId = playerState.currentTrack?.videoId,
+                                isPlaying = playerState.isPlaying,
+                                onPlayTrack = { track, list -> viewModel.playTrack(track, list) },
+                                onFavoriteToggle = { viewModel.toggleFavorite(it) },
+                                onAddToQueue = { viewModel.addToQueue(it) },
+                                onAddToPlaylist = { trackToAddToPlaylist = it },
+                                onClearSearch = { viewModel.clearSearch() }
+                            )
+                        }
+
+                        MainTab.EXPLORE -> {
+                            ExploreScreen(
+                                tracks = uiState.genreTracks,
+                                isLoadingTracks = uiState.isLoadingGenre,
                                 selectedGenre = uiState.selectedGenre,
                                 directUrlInput = uiState.directUrlInput,
                                 isFetchingDirectLink = uiState.isFetchingDirectLink,
@@ -163,13 +185,10 @@ fun BrutalBeatsApp(
                                 onSelectGenre = { viewModel.selectGenre(it) },
                                 onDirectUrlChange = { viewModel.updateDirectUrlInput(it) },
                                 onPlayDirectUrl = { viewModel.playDirectLink(it) },
-                                onPlayTrack = { track, queue ->
-                                    viewModel.playTrack(track, queue)
-                                },
+                                onPlayTrack = { track, list -> viewModel.playTrack(track, list) },
                                 onFavoriteToggle = { viewModel.toggleFavorite(it) },
                                 onAddToQueue = { viewModel.addToQueue(it) },
-                                onAddToPlaylist = { trackToAddToPlaylist = it },
-                                onClearSearch = { viewModel.clearSearch() }
+                                onAddToPlaylist = { trackToAddToPlaylist = it }
                             )
                         }
 
@@ -181,18 +200,14 @@ fun BrutalBeatsApp(
                                 selectedPlaylistTracks = uiState.selectedPlaylistTracks,
                                 currentPlayingVideoId = playerState.currentTrack?.videoId,
                                 isPlaying = playerState.isPlaying,
-                                onPlayTrack = { track, queue ->
-                                    viewModel.playTrack(track, queue)
-                                },
+                                onPlayTrack = { track, list -> viewModel.playTrack(track, list) },
                                 onFavoriteToggle = { viewModel.toggleFavorite(it) },
                                 onAddToQueue = { viewModel.addToQueue(it) },
                                 onCreatePlaylist = { viewModel.createPlaylist(it) },
                                 onDeletePlaylist = { viewModel.deletePlaylist(it) },
                                 onOpenPlaylist = { viewModel.openPlaylist(it) },
                                 onClosePlaylist = { viewModel.selectTab(MainTab.LIBRARY) },
-                                onRemoveTrackFromPlaylist = { pid, vid ->
-                                    viewModel.removeTrackFromPlaylist(pid, vid)
-                                }
+                                onRemoveTrackFromPlaylist = { pId, vId -> viewModel.removeTrackFromPlaylist(pId, vId) }
                             )
                         }
 
@@ -201,9 +216,7 @@ fun BrutalBeatsApp(
                                 history = history,
                                 currentPlayingVideoId = playerState.currentTrack?.videoId,
                                 isPlaying = playerState.isPlaying,
-                                onPlayTrack = { track, queue ->
-                                    viewModel.playTrack(track, queue)
-                                },
+                                onPlayTrack = { track, list -> viewModel.playTrack(track, list) },
                                 onFavoriteToggle = { viewModel.toggleFavorite(it) },
                                 onAddToQueue = { viewModel.addToQueue(it) },
                                 onAddToPlaylist = { trackToAddToPlaylist = it },
@@ -211,191 +224,121 @@ fun BrutalBeatsApp(
                             )
                         }
                     }
+
+                    // Floating Toast / Status Message Banner
+                    uiState.statusMessage?.let { msg ->
+                        Surface(
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(top = 10.dp)
+                                .clip(RoundedCornerShape(8.dp)),
+                            color = NeonLime,
+                            tonalElevation = 6.dp
+                        ) {
+                            Text(
+                                text = msg,
+                                color = Color.Black,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
 
-        // Action Status Toast / Toast notification banner
-        uiState.statusMessage?.let { msg ->
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .statusBarsPadding()
-                    .padding(top = 12.dp)
-                    .background(BrutalYellow)
-                    .border(2.5.dp, BrutalBlack)
-                    .padding(horizontal = 14.dp, vertical = 8.dp)
-                    .testTag("status_toast")
-            ) {
-                Text(
-                    text = "► $msg",
-                    color = BrutalBlack,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Black,
-                    fontFamily = FontFamily.Monospace,
-                    letterSpacing = 0.5.sp
-                )
-            }
-        }
-
-        // Add to Playlist Modal Dialog
+        // Add to Playlist Dialog
         trackToAddToPlaylist?.let { track ->
             AlertDialog(
                 onDismissRequest = {
                     trackToAddToPlaylist = null
                     showNewPlaylistInput = false
                 },
-                containerColor = BrutalWhite,
-                shape = androidx.compose.ui.graphics.RectangleShape,
-                modifier = Modifier.border(3.5.dp, BrutalBlack),
                 title = {
                     Text(
-                        text = "ADD TO PLAYLIST",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Black,
-                        fontFamily = FontFamily.Monospace,
-                        color = BrutalBlack
+                        text = "Add to Playlist",
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 },
                 text = {
-                    Column(modifier = Modifier.fillMaxWidth()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            text = "TRACK: ${track.title}",
+                            text = track.title,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 12.sp,
-                            fontWeight = FontWeight.Black,
-                            fontFamily = FontFamily.SansSerif,
-                            maxLines = 1,
-                            color = BrutalBlack
+                            maxLines = 1
                         )
-                        Spacer(modifier = Modifier.height(10.dp))
 
-                        if (playlists.isEmpty() && !showNewPlaylistInput) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+
+                        if (playlists.isEmpty()) {
                             Text(
-                                text = "NO PLAYLISTS CREATED YET.",
-                                fontSize = 11.sp,
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF666666)
+                                text = "No playlists created yet.",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 12.sp
                             )
                         } else {
-                            playlists.forEach { pl ->
-                                Row(
+                            playlists.forEach { playlist ->
+                                Surface(
                                     modifier = Modifier
                                         .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
                                         .clickable {
-                                            viewModel.addTrackToPlaylist(pl.id, track)
+                                            viewModel.addTrackToPlaylist(playlist.id, track)
                                             trackToAddToPlaylist = null
-                                        }
-                                        .border(1.5.dp, BrutalBlack)
-                                        .background(BrutalOffWhite)
-                                        .padding(8.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
+                                        },
+                                    color = MaterialTheme.colorScheme.surfaceVariant
                                 ) {
                                     Text(
-                                        text = pl.name,
+                                        text = playlist.name,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontWeight = FontWeight.SemiBold,
                                         fontSize = 13.sp,
-                                        fontWeight = FontWeight.Black,
-                                        fontFamily = FontFamily.Monospace,
-                                        color = BrutalBlack
-                                    )
-                                    Text(
-                                        text = "[ADD]",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Black,
-                                        fontFamily = FontFamily.Monospace,
-                                        color = BrutalYellow
+                                        modifier = Modifier.padding(10.dp)
                                     )
                                 }
-                                Spacer(modifier = Modifier.height(6.dp))
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(8.dp))
-
                         if (showNewPlaylistInput) {
-                            TextField(
+                            OutlinedTextField(
                                 value = newPlaylistTitle,
                                 onValueChange = { newPlaylistTitle = it },
-                                placeholder = {
-                                    Text(
-                                        "PLAYLIST NAME...",
-                                        fontSize = 12.sp,
-                                        fontFamily = FontFamily.Monospace
-                                    )
-                                },
+                                label = { Text("New Playlist Name") },
                                 singleLine = true,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .border(2.dp, BrutalBlack),
-                                colors = TextFieldDefaults.colors(
-                                    focusedContainerColor = BrutalOffWhite,
-                                    unfocusedContainerColor = BrutalOffWhite,
-                                    cursorColor = BrutalBlack
-                                )
+                                modifier = Modifier.fillMaxWidth()
                             )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            BrutalButton(
+                            Button(
                                 onClick = {
                                     if (newPlaylistTitle.isNotBlank()) {
-                                        viewModel.createPlaylist(newPlaylistTitle)
+                                        viewModel.createPlaylist(newPlaylistTitle.trim())
                                         newPlaylistTitle = ""
                                         showNewPlaylistInput = false
                                     }
                                 },
+                                colors = ButtonDefaults.buttonColors(containerColor = NeonLime),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text(
-                                    text = "SAVE & DONE",
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.Black,
-                                    fontSize = 11.sp
-                                )
+                                Text("Create & Add", color = Color.Black, fontWeight = FontWeight.Bold)
                             }
                         } else {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { showNewPlaylistInput = true }
-                                    .padding(vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                            TextButton(
+                                onClick = { showNewPlaylistInput = true },
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Add,
-                                    contentDescription = "New",
-                                    tint = BrutalBlack,
-                                    modifier = Modifier.size(16.dp)
-                                )
+                                Icon(Icons.Default.Add, contentDescription = null, tint = NeonLime)
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "+ CREATE NEW PLAYLIST",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Black,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = BrutalBlack
-                                )
+                                Text("Create New Playlist", color = NeonLime, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
                 },
                 confirmButton = {
-                    Box(
-                        modifier = Modifier
-                            .border(2.dp, BrutalBlack)
-                            .background(BrutalBlack)
-                            .clickable {
-                                trackToAddToPlaylist = null
-                                showNewPlaylistInput = false
-                            }
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
-                    ) {
-                        Text(
-                            text = "CLOSE",
-                            color = BrutalWhite,
-                            fontWeight = FontWeight.Black,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 11.sp
-                        )
+                    TextButton(onClick = { trackToAddToPlaylist = null }) {
+                        Text("Close", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             )

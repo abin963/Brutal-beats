@@ -6,16 +6,22 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
@@ -24,13 +30,11 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.source.PreferredSourceMode
-import com.example.ui.theme.*
-import com.example.ui.viewmodel.MainTab
+import com.example.ui.theme.NeonLime
+import com.example.ui.theme.ThemeManager
 
 @Composable
 fun HeaderSection(
-    activeTab: MainTab,
-    onTabSelected: (MainTab) -> Unit,
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
     onSearchSubmit: (String) -> Unit,
@@ -41,46 +45,52 @@ fun HeaderSection(
     onSourceModeChanged: (PreferredSourceMode) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val focusManager = LocalFocusManager.current
+    val isDark by ThemeManager.isDarkMode.collectAsState()
 
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(BrutalOffWhite)
-            .padding(horizontal = 14.dp, vertical = 10.dp)
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 16.dp, vertical = 10.dp)
     ) {
-        // Top row: Brand & Live Source Status
+        // Top Brand & Mode Row
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Brand
+            // Brutal Beats Brand Logo
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .background(BrutalBlack)
-                    .border(2.5.dp, BrutalBlack)
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "BRUTAL",
-                    color = BrutalWhite,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Black,
-                    fontFamily = FontFamily.SansSerif,
-                    letterSpacing = (-0.5).sp
-                )
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.Black)
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "BRUTAL",
+                        color = Color.White,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Black,
+                        fontFamily = FontFamily.SansSerif,
+                        letterSpacing = (-0.5).sp
+                    )
+                }
                 Spacer(modifier = Modifier.width(4.dp))
                 Box(
                     modifier = Modifier
-                        .background(BrutalYellow)
-                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(NeonLime)
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Text(
                         text = "BEATS",
-                        color = BrutalBlack,
-                        fontSize = 14.sp,
+                        color = Color.Black,
+                        fontSize = 17.sp,
                         fontWeight = FontWeight.Black,
                         fontFamily = FontFamily.SansSerif,
                         letterSpacing = 0.5.sp
@@ -88,63 +98,54 @@ fun HeaderSection(
                 }
             }
 
-            // Source Mode Selector
+            // Dark/Light Mode & Source Indicator
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(
-                    text = "SRC:",
-                    color = BrutalBlack,
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Black,
-                    fontFamily = FontFamily.Monospace
-                )
-                PreferredSourceMode.entries.forEach { mode ->
-                    val isSelected = preferredSourceMode == mode
-                    Box(
-                        modifier = Modifier
-                            .border(1.5.dp, BrutalBlack)
-                            .background(if (isSelected) BrutalBlack else BrutalWhite)
-                            .clickable { onSourceModeChanged(mode) }
-                            .padding(horizontal = 6.dp, vertical = 3.dp)
-                            .testTag("source_mode_${mode.name.lowercase()}"),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = mode.name,
-                            color = if (isSelected) BrutalYellow else BrutalBlack,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Black,
-                            fontFamily = FontFamily.Monospace
-                        )
-                    }
+                // Theme Toggle Button
+                IconButton(
+                    onClick = { ThemeManager.toggleTheme(context) },
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .testTag("theme_toggle_button")
+                ) {
+                    Icon(
+                        imageVector = if (isDark) Icons.Default.LightMode else Icons.Default.DarkMode,
+                        contentDescription = "Toggle Theme",
+                        tint = if (isDark) NeonLime else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
-        // Large Brutalist Search Bar
-        BrutalCard(
+        // Modern Search Bar
+        Surface(
             modifier = Modifier.fillMaxWidth(),
-            backgroundColor = BrutalWhite,
-            borderColor = BrutalBlack,
-            shadowColor = BrutalBlack,
-            borderWidth = 3.dp,
-            shadowOffset = 3.dp
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = androidx.compose.foundation.BorderStroke(
+                1.5.dp,
+                if (searchQuery.isNotEmpty()) NeonLime else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+            ),
+            tonalElevation = 2.dp
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
                     imageVector = Icons.Default.Search,
                     contentDescription = "Search",
-                    tint = BrutalBlack,
-                    modifier = Modifier.size(24.dp)
+                    tint = if (searchQuery.isNotEmpty()) NeonLime else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(22.dp)
                 )
 
                 Spacer(modifier = Modifier.width(8.dp))
@@ -154,11 +155,9 @@ fun HeaderSection(
                     onValueChange = onSearchQueryChange,
                     placeholder = {
                         Text(
-                            text = "SEARCH YOUTUBE + JIOSAAVN...",
-                            fontSize = 12.sp,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF777777)
+                            text = "Search YouTube, JioSaavn, Artists...",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )
                     },
                     modifier = Modifier
@@ -170,14 +169,13 @@ fun HeaderSection(
                         unfocusedContainerColor = Color.Transparent,
                         focusedIndicatorColor = Color.Transparent,
                         unfocusedIndicatorColor = Color.Transparent,
-                        cursorColor = BrutalBlack,
-                        focusedTextColor = BrutalBlack,
-                        unfocusedTextColor = BrutalBlack
+                        cursorColor = NeonLime,
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface
                     ),
                     textStyle = LocalTextStyle.current.copy(
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 14.sp
                     ),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(
@@ -196,36 +194,78 @@ fun HeaderSection(
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Clear",
-                            tint = BrutalBlack,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(18.dp)
                         )
                     }
                 }
 
-                // Brutalist search button
+                // Search Action Button
                 Box(
                     modifier = Modifier
-                        .background(if (isSearching) BrutalOrange else BrutalYellow)
-                        .border(2.dp, BrutalBlack)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isSearching) MaterialTheme.colorScheme.surfaceVariant else NeonLime)
                         .clickable {
                             focusManager.clearFocus()
                             onSearchSubmit(searchQuery)
                         }
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
                         .testTag("search_submit_button")
                 ) {
                     Text(
-                        text = if (isSearching) "..." else "FIND",
-                        color = BrutalBlack,
-                        fontWeight = FontWeight.Black,
-                        fontFamily = FontFamily.Monospace,
+                        text = if (isSearching) "..." else "Search",
+                        color = Color.Black,
+                        fontWeight = FontWeight.Bold,
                         fontSize = 12.sp
                     )
                 }
             }
         }
 
-        // Search Suggestions chips if active
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Engine Source Selector Pills
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = "AUDIO SOURCE",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                PreferredSourceMode.entries.forEach { mode ->
+                    val isSelected = preferredSourceMode == mode
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (isSelected) NeonLime else MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier
+                            .clickable { onSourceModeChanged(mode) }
+                            .testTag("source_mode_${mode.name.lowercase()}"),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (isSelected) NeonLime else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                        )
+                    ) {
+                        Text(
+                            text = mode.name,
+                            color = if (isSelected) Color.Black else MaterialTheme.colorScheme.onSurface,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Suggestions row if available
         if (searchSuggestions.isNotEmpty()) {
             Spacer(modifier = Modifier.height(6.dp))
             LazyRow(
@@ -233,56 +273,23 @@ fun HeaderSection(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 items(searchSuggestions) { suggestion ->
-                    Box(
-                        modifier = Modifier
-                            .background(BrutalWhite)
-                            .border(1.5.dp, BrutalBlack)
-                            .clickable {
-                                onSearchQueryChange(suggestion)
-                                onSearchSubmit(suggestion)
-                                focusManager.clearFocus()
-                            }
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.clickable {
+                            onSearchQueryChange(suggestion)
+                            onSearchSubmit(suggestion)
+                            focusManager.clearFocus()
+                        }
                     ) {
                         Text(
                             text = "↗ $suggestion",
                             fontSize = 11.sp,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
-                            color = BrutalBlack
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                         )
                     }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // Navigation Tabs: [DISCOVER] [LIBRARY] [HISTORY]
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            MainTab.entries.forEach { tab ->
-                val isSelected = activeTab == tab
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .border(2.5.dp, BrutalBlack)
-                        .background(if (isSelected) BrutalBlack else BrutalWhite)
-                        .clickable { onTabSelected(tab) }
-                        .padding(vertical = 10.dp)
-                        .testTag("tab_${tab.name.lowercase()}"),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "[ ${tab.name} ]",
-                        color = if (isSelected) BrutalYellow else BrutalBlack,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Black,
-                        fontFamily = FontFamily.Monospace,
-                        letterSpacing = 1.sp
-                    )
                 }
             }
         }

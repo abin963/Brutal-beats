@@ -15,9 +15,14 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 enum class MainTab {
-    DISCOVER,
+    HOME,
+    EXPLORE,
     LIBRARY,
-    HISTORY
+    HISTORY;
+
+    companion object {
+        val DISCOVER: MainTab get() = HOME
+    }
 }
 
 data class PlayerUiState(
@@ -40,7 +45,7 @@ data class PlayerUiState(
 )
 
 data class BrutalUiState(
-    val activeTab: MainTab = MainTab.DISCOVER,
+    val activeTab: MainTab = MainTab.HOME,
     val searchQuery: String = "",
     val searchResults: List<Track> = emptyList(),
     val isSearching: Boolean = false,

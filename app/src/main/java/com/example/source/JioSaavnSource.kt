@@ -52,7 +52,10 @@ class JioSaavnSource : MusicSource {
                     val album = unescapeHtml(item.optString("album", ""))
                     val rawDuration = item.optString("duration", "0").toIntOrNull() ?: 0
                     val rawImage = item.optString("image", "")
-                    val highResImage = rawImage.replace("150x150", "500x500")
+                    val highResImage = rawImage
+                        .replace("http://", "https://")
+                        .replace("150x150", "500x500")
+                        .replace("50x50", "500x500")
 
                     val encryptedUrl = item.optString("encrypted_media_url", "")
                     val previewUrl = item.optString("media_preview_url", "")

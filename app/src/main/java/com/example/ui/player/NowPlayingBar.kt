@@ -1,26 +1,36 @@
 package com.example.ui.player
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import com.example.data.model.Track
-import com.example.ui.theme.*
+import com.example.ui.components.BrutalThumbnail
+import com.example.ui.theme.NeonCyan
+import com.example.ui.theme.NeonLime
 
 @Composable
 fun NowPlayingBottomBar(
@@ -36,175 +46,163 @@ fun NowPlayingBottomBar(
 ) {
     if (currentTrack == null) return
 
-    Column(
+    val playInteractionSource = remember { MutableInteractionSource() }
+    val isPlayPressed by playInteractionSource.collectIsPressedAsState()
+    val playButtonScale by animateFloatAsState(
+        targetValue = if (isPlayPressed) 0.92f else 1f,
+        label = "play_scale"
+    )
+
+    Surface(
         modifier = modifier
             .fillMaxWidth()
-            .background(BrutalBlack)
-            .border(width = 3.5.dp, color = BrutalBlack)
-            .testTag("now_playing_bottom_bar")
+            .padding(horizontal = 10.dp, vertical = 6.dp)
+            .clickable(onClick = onExpand)
+            .testTag("now_playing_bottom_bar"),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 8.dp,
+        shadowElevation = 6.dp,
+        border = androidx.compose.foundation.BorderStroke(
+            1.5.dp,
+            MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+        )
     ) {
-        // Progress stripe
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(4.dp)
-                .background(Color(0xFF333333))
-        ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Live Neon Progress Track at top of mini-player
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(fraction = progressFraction.coerceIn(0f, 1f))
-                    .fillMaxHeight()
-                    .background(BrutalYellow)
-            )
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onExpand)
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Track Art
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .border(2.dp, BrutalYellow)
-                    .background(BrutalDeepBlack)
+                    .fillMaxWidth()
+                    .height(3.dp)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
             ) {
-                AsyncImage(
-                    model = currentTrack.thumbnailUrl,
-                    contentDescription = currentTrack.title,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-
-            Spacer(modifier = Modifier.width(10.dp))
-
-            // Track info
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .background(BrutalYellow)
-                            .padding(horizontal = 4.dp, vertical = 1.dp)
-                    ) {
-                        Text(
-                            text = if (isPlaying) "PLAYING" else "PAUSED",
-                            fontSize = 8.sp,
-                            fontWeight = FontWeight.Black,
-                            fontFamily = FontFamily.Monospace,
-                            color = BrutalBlack
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "YT",
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace,
-                        color = Color(0xFFAAAAAA)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(2.dp))
-
-                Text(
-                    text = currentTrack.title,
-                    color = BrutalWhite,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Black,
-                    fontFamily = FontFamily.SansSerif,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = currentTrack.artist.uppercase(),
-                    color = BrutalYellow,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            // Controls
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                // Favorite
-                IconButton(
-                    onClick = onFavoriteToggle,
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(
-                        imageVector = if (currentTrack.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                        contentDescription = "Favorite",
-                        tint = if (currentTrack.isFavorite) BrutalPink else BrutalWhite,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                // Previous
-                IconButton(
-                    onClick = onPrevious,
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.SkipPrevious,
-                        contentDescription = "Previous",
-                        tint = BrutalWhite,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-
-                // Play / Pause
                 Box(
                     modifier = Modifier
-                        .size(38.dp)
-                        .background(BrutalYellow)
-                        .border(2.dp, BrutalWhite)
-                        .clickable(onClick = onPlayPause)
-                        .testTag("bar_play_pause_button"),
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth(fraction = progressFraction.coerceIn(0f, 1f))
+                        .fillMaxHeight()
+                        .background(NeonLime)
+                )
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Reliable Thumbnail with fallback
+                BrutalThumbnail(
+                    imageUrl = currentTrack.thumbnailUrl,
+                    videoId = currentTrack.videoId,
+                    sourceId = currentTrack.sourceId,
+                    contentDescription = currentTrack.title,
+                    modifier = Modifier.size(50.dp),
+                    shape = RoundedCornerShape(10.dp)
+                )
+
+                Spacer(modifier = Modifier.width(10.dp))
+
+                // Song Info
+                Column(
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Icon(
-                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = if (isPlaying) "Pause" else "Play",
-                        tint = BrutalBlack,
-                        modifier = Modifier.size(22.dp)
+                    Text(
+                        text = currentTrack.title,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
+
+                    Spacer(modifier = Modifier.height(2.dp))
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = currentTrack.artist,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Normal,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        // Clean mini source pill
+                        val isSaavn = currentTrack.sourceId.contains("SAAVN", ignoreCase = true)
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(if (isSaavn) NeonCyan.copy(alpha = 0.2f) else NeonLime.copy(alpha = 0.2f))
+                                .border(1.dp, if (isSaavn) NeonCyan else NeonLime, RoundedCornerShape(4.dp))
+                                .padding(horizontal = 4.dp, vertical = 1.dp)
+                        ) {
+                            Text(
+                                text = if (isSaavn) "320K" else "YT",
+                                color = if (isSaavn) NeonCyan else NeonLime,
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
                 }
 
-                // Next
-                IconButton(
-                    onClick = onNext,
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.SkipNext,
-                        contentDescription = "Next",
-                        tint = BrutalWhite,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
+                Spacer(modifier = Modifier.width(6.dp))
 
-                // Expand Full Player
-                IconButton(
-                    onClick = onExpand,
-                    modifier = Modifier.size(36.dp)
+                // Primary One-Hand Controls: [Prev] [LARGE PLAY/PAUSE] [Next]
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowUp,
-                        contentDescription = "Expand Player",
-                        tint = BrutalYellow,
-                        modifier = Modifier.size(24.dp)
-                    )
+                    // Previous Button
+                    IconButton(
+                        onClick = onPrevious,
+                        modifier = Modifier.size(42.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SkipPrevious,
+                            contentDescription = "Previous Track",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+
+                    // Large 56dp Circular Play/Pause Button
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .scale(playButtonScale)
+                            .clip(CircleShape)
+                            .background(NeonLime)
+                            .clickable(
+                                interactionSource = playInteractionSource,
+                                indication = ripple(),
+                                onClick = onPlayPause
+                            )
+                            .testTag("bar_play_pause_button"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = if (isPlaying) "Pause" else "Play",
+                            tint = Color.Black,
+                            modifier = Modifier.size(30.dp)
+                        )
+                    }
+
+                    // Next Button
+                    IconButton(
+                        onClick = onNext,
+                        modifier = Modifier.size(42.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SkipNext,
+                            contentDescription = "Next Track",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
                 }
             }
         }

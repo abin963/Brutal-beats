@@ -118,7 +118,7 @@ object YouTubeSearchService {
                 videoId = videoId,
                 title = "YOUTUBE STREAM ($videoId)",
                 artist = "YOUTUBE",
-                thumbnailUrl = "https://img.youtube.com/vi/$videoId/hqdefault.jpg",
+                thumbnailUrl = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg",
                 duration = "STREAM",
                 genre = "DIRECT LINK",
                 ytSourceLabel = "DIRECT_YT"
@@ -180,7 +180,7 @@ object YouTubeSearchService {
                                         videoId = videoId,
                                         title = title.trim(),
                                         artist = artist.trim(),
-                                        thumbnailUrl = "https://img.youtube.com/vi/$videoId/hqdefault.jpg",
+                                        thumbnailUrl = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg",
                                         duration = duration,
                                         genre = genreLabel,
                                         ytSourceLabel = "LIVE_SEARCH"
@@ -215,7 +215,7 @@ object YouTubeSearchService {
                         videoId = vid,
                         title = unescapeUnicode(rawTitle).replace("\\\"", "\"").take(70),
                         artist = unescapeUnicode(rawArtist).replace("\\\"", "\"").take(40),
-                        thumbnailUrl = "https://img.youtube.com/vi/$vid/hqdefault.jpg",
+                        thumbnailUrl = "https://i.ytimg.com/vi/$vid/hqdefault.jpg",
                         duration = "STREAM",
                         genre = genreLabel,
                         ytSourceLabel = "LIVE_SEARCH"
