@@ -46,6 +46,7 @@ fun BrutalBeatsApp(
     val playlists by viewModel.playlists.collectAsStateWithLifecycle()
     val recommendations by viewModel.recommendations.collectAsStateWithLifecycle()
     val isLoadingRecommendations by viewModel.isLoadingRecommendations.collectAsStateWithLifecycle()
+    val radioState by viewModel.radioState.collectAsStateWithLifecycle()
 
     var trackToAddToPlaylist by remember { mutableStateOf<Track?>(null) }
     var showNewPlaylistInput by remember { mutableStateOf(false) }
@@ -154,7 +155,11 @@ fun BrutalBeatsApp(
                 },
                 onError = {
                     viewModel.onPlaybackError(it)
-                }
+                },
+                radioState = radioState,
+                onStartRadio = { viewModel.startRadio(it) },
+                onStopRadio = { viewModel.stopRadio() },
+                onRetryRadio = { viewModel.retryRadioFetch() }
             )
         }
 
@@ -202,7 +207,8 @@ fun BrutalBeatsApp(
                             },
                             progressFraction = if (playerState.totalDurationSec > 0f) {
                                 playerState.currentPositionSec / playerState.totalDurationSec
-                            } else 0f
+                            } else 0f,
+                            isRadioActive = playerState.isRadioActive || radioState.isRadioActive
                         )
 
                         // Bottom Navigation: HOME / EXPLORE / LIBRARY / SEARCH
@@ -234,7 +240,8 @@ fun BrutalBeatsApp(
                                 onFavoriteToggle = { viewModel.toggleFavorite(it) },
                                 onAddToQueue = { viewModel.addToQueue(it) },
                                 onAddToPlaylist = { trackToAddToPlaylist = it },
-                                onClearSearch = { viewModel.clearSearch() }
+                                onClearSearch = { viewModel.clearSearch() },
+                                onStartRadio = { viewModel.startRadio(it) }
                             )
                         }
 
@@ -253,7 +260,8 @@ fun BrutalBeatsApp(
                                 onPlayTrack = { track, list -> viewModel.playTrack(track, list) },
                                 onFavoriteToggle = { viewModel.toggleFavorite(it) },
                                 onAddToQueue = { viewModel.addToQueue(it) },
-                                onAddToPlaylist = { trackToAddToPlaylist = it }
+                                onAddToPlaylist = { trackToAddToPlaylist = it },
+                                onStartRadio = { viewModel.startRadio(it) }
                             )
                         }
 
@@ -272,7 +280,8 @@ fun BrutalBeatsApp(
                                 onDeletePlaylist = { viewModel.deletePlaylist(it) },
                                 onOpenPlaylist = { viewModel.openPlaylist(it) },
                                 onClosePlaylist = { viewModel.selectTab(MainTab.LIBRARY) },
-                                onRemoveTrackFromPlaylist = { pId, vId -> viewModel.removeTrackFromPlaylist(pId, vId) }
+                                onRemoveTrackFromPlaylist = { pId, vId -> viewModel.removeTrackFromPlaylist(pId, vId) },
+                                onStartRadio = { viewModel.startRadio(it) }
                             )
                         }
 
@@ -292,7 +301,8 @@ fun BrutalBeatsApp(
                                 onPlayTrack = { track, list -> viewModel.playTrack(track, list) },
                                 onFavoriteToggle = { viewModel.toggleFavorite(it) },
                                 onAddToQueue = { viewModel.addToQueue(it) },
-                                onAddToPlaylist = { trackToAddToPlaylist = it }
+                                onAddToPlaylist = { trackToAddToPlaylist = it },
+                                onStartRadio = { viewModel.startRadio(it) }
                             )
                         }
 
@@ -305,7 +315,8 @@ fun BrutalBeatsApp(
                                 onFavoriteToggle = { viewModel.toggleFavorite(it) },
                                 onAddToQueue = { viewModel.addToQueue(it) },
                                 onAddToPlaylist = { trackToAddToPlaylist = it },
-                                onClearHistory = { viewModel.clearHistory() }
+                                onClearHistory = { viewModel.clearHistory() },
+                                onStartRadio = { viewModel.startRadio(it) }
                             )
                         }
                     }

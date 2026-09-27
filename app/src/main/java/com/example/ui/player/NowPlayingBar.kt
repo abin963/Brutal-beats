@@ -46,6 +46,7 @@ fun NowPlayingBottomBar(
     onExpand: () -> Unit,
     onFavoriteToggle: () -> Unit,
     progressFraction: Float,
+    isRadioActive: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     if (currentTrack == null) return
@@ -163,6 +164,25 @@ fun NowPlayingBottomBar(
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = FontFamily.Monospace
                             )
+                        }
+
+                        if (isRadioActive) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(NyxPurple.copy(alpha = 0.25f))
+                                    .border(1.dp, NyxPurple.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                            ) {
+                                Text(
+                                    text = "● RADIO",
+                                    color = NyxPurpleLight,
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
                         }
                     }
                 }

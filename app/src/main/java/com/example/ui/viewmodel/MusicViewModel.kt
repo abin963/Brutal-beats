@@ -49,7 +49,17 @@ data class PlayerUiState(
     val isPlayerExpanded: Boolean = false,
     val isQueueVisible: Boolean = false,
     val isVideoMode: Boolean = false,
-    val preferredSourceMode: PreferredSourceMode = PreferredSourceMode.AUTO
+    val preferredSourceMode: PreferredSourceMode = PreferredSourceMode.AUTO,
+    val isRadioActive: Boolean = false,
+    val radioSeedTrack: Track? = null
+)
+
+data class RadioState(
+    val isRadioActive: Boolean = false,
+    val seedTrack: Track? = null,
+    val isLoading: Boolean = false,
+    val error: String? = null,
+    val radioHistory: List<String> = emptyList()
 )
 
 data class BrutalUiState(
@@ -102,9 +112,13 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val _isLoadingRecommendations = MutableStateFlow(false)
     val isLoadingRecommendations: StateFlow<Boolean> = _isLoadingRecommendations.asStateFlow()
 
+    private val _radioState = MutableStateFlow(RadioState())
+    val radioState: StateFlow<RadioState> = _radioState.asStateFlow()
+
     private val recommendationsCache = mutableMapOf<String, List<Track>>()
     private val recentlyAutoplayedIds = LinkedHashSet<String>()
 
+    private var radioFetchJob: Job? = null
     private var recommendationJob: Job? = null
     private var searchJob: Job? = null
     private var suggestionJob: Job? = null
@@ -480,6 +494,14 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
         }
+
+        // Proactive Radio buffer replenishment: request more tracks when queue is running low
+        if (_radioState.value.isRadioActive && !_radioState.value.isLoading && _radioState.value.error == null) {
+            val remaining = _playerState.value.queue.size - 1 - _playerState.value.queueIndex
+            if (remaining <= 2 && currentSec > 8f) {
+                loadMoreRadioTracks()
+            }
+        }
     }
 
     fun onTrackFinished() {
@@ -502,8 +524,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        // 2. Autoplay setting check
-        if (!current.isAutoplayEnabled) {
+        // 2. Autoplay setting check (Radio overrides and continues unless user stopped radio)
+        if (!current.isAutoplayEnabled && !_radioState.value.isRadioActive) {
             _playerState.update { it.copy(isPlaying = false, currentPositionSec = 0f) }
             audioPlaybackManager.stop()
             showMessage("AUTOPLAY OFF: PLAYBACK STOPPED")
@@ -540,8 +562,31 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     } else {
                         current.queue[nextQueueIndex]
                     }
+
+                    // Replenish radio if queue is nearly finished
+                    if (_radioState.value.isRadioActive && (current.queue.size - nextQueueIndex <= 2)) {
+                        loadMoreRadioTracks()
+                    }
+
                     playTrack(nextTrack)
                     return@launch
+                }
+
+                // Step A.2: If Radio is active and queue ended, immediately fetch more related radio tracks
+                if (_radioState.value.isRadioActive) {
+                    _radioState.update { it.copy(isLoading = true, error = null) }
+                    val seed = _radioState.value.seedTrack ?: currentTrack
+                    val excluded = _radioState.value.radioHistory.toSet() + currentTrack.videoId
+                    val more = repository.fetchRadioTracks(seed, _playerState.value.preferredSourceMode, excluded)
+                    if (more.isNotEmpty()) {
+                        val nextTrack = more.first()
+                        val newHistory = _radioState.value.radioHistory + more.map { it.videoId }
+                        _radioState.update { it.copy(isLoading = false, radioHistory = newHistory) }
+                        playTrack(nextTrack, current.queue + more)
+                        return@launch
+                    } else {
+                        _radioState.update { it.copy(isLoading = false, error = "Couldn't find more tracks.") }
+                    }
                 }
 
                 // Step B: Queue is finished/single track. Pull from loaded recommendations
@@ -695,6 +740,100 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             repository.clearHistory()
             showMessage("HISTORY CLEARED")
         }
+    }
+
+    fun startRadio(seedTrack: Track) {
+        radioFetchJob?.cancel()
+        _radioState.value = RadioState(
+            isRadioActive = true,
+            seedTrack = seedTrack,
+            isLoading = true,
+            error = null,
+            radioHistory = listOf(seedTrack.videoId)
+        )
+        _playerState.update { it.copy(isRadioActive = true, radioSeedTrack = seedTrack) }
+        showMessage("RADIO STARTED: ${seedTrack.title.take(20)}")
+
+        val currentPlaying = _playerState.value.currentTrack
+        if (currentPlaying?.videoId != seedTrack.videoId) {
+            playTrack(seedTrack, listOf(seedTrack))
+        } else {
+            _playerState.update { current ->
+                current.copy(queue = listOf(seedTrack), queueIndex = 0)
+            }
+        }
+
+        radioFetchJob = viewModelScope.launch {
+            try {
+                val excluded = _radioState.value.radioHistory.toSet() + seedTrack.videoId
+                val related = repository.fetchRadioTracks(seedTrack, _playerState.value.preferredSourceMode, excluded)
+                if (related.isNotEmpty()) {
+                    val newHistory = _radioState.value.radioHistory + related.map { it.videoId }
+                    _radioState.update {
+                        it.copy(isLoading = false, error = null, radioHistory = newHistory)
+                    }
+                    _playerState.update { current ->
+                        val existingIds = current.queue.map { it.videoId }.toSet()
+                        val uniqueNew = related.filter { it.videoId !in existingIds }
+                        current.copy(queue = current.queue + uniqueNew)
+                    }
+                    preloadNextTrackFromList(related, seedTrack.videoId)
+                } else {
+                    _radioState.update {
+                        it.copy(isLoading = false, error = "Couldn't find more tracks.")
+                    }
+                }
+            } catch (e: Exception) {
+                _radioState.update {
+                    it.copy(isLoading = false, error = "Couldn't find more tracks.")
+                }
+            }
+        }
+    }
+
+    fun loadMoreRadioTracks(seed: Track? = null) {
+        if (_radioState.value.isLoading) return
+        val seedTrack = seed ?: _radioState.value.seedTrack ?: _playerState.value.currentTrack ?: return
+
+        _radioState.update { it.copy(isLoading = true, error = null) }
+        radioFetchJob?.cancel()
+        radioFetchJob = viewModelScope.launch {
+            try {
+                val currentPlayingId = _playerState.value.currentTrack?.videoId ?: ""
+                val excluded = _radioState.value.radioHistory.toSet() + currentPlayingId + seedTrack.videoId
+                val more = repository.fetchRadioTracks(seedTrack, _playerState.value.preferredSourceMode, excluded)
+                if (more.isNotEmpty()) {
+                    val newHistory = _radioState.value.radioHistory + more.map { it.videoId }
+                    _radioState.update {
+                        it.copy(isLoading = false, error = null, radioHistory = newHistory)
+                    }
+                    _playerState.update { current ->
+                        val existingIds = current.queue.map { it.videoId }.toSet()
+                        val unique = more.filter { it.videoId !in existingIds }
+                        current.copy(queue = current.queue + unique)
+                    }
+                } else {
+                    _radioState.update {
+                        it.copy(isLoading = false, error = "Couldn't find more tracks.")
+                    }
+                }
+            } catch (e: Exception) {
+                _radioState.update {
+                    it.copy(isLoading = false, error = "Couldn't find more tracks.")
+                }
+            }
+        }
+    }
+
+    fun retryRadioFetch() {
+        loadMoreRadioTracks()
+    }
+
+    fun stopRadio() {
+        radioFetchJob?.cancel()
+        _radioState.value = RadioState()
+        _playerState.update { it.copy(isRadioActive = false, radioSeedTrack = null) }
+        showMessage("RADIO STOPPED")
     }
 
     fun showMessage(msg: String) {

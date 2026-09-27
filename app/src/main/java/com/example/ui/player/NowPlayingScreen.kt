@@ -35,9 +35,7 @@ import com.example.data.model.Track
 import com.example.source.PlaybackType
 import com.example.ui.components.BrutalThumbnail
 import com.example.ui.components.TrackCard
-import com.example.ui.theme.NeonCyan
-import com.example.ui.theme.NeonLime
-import com.example.ui.theme.NeonPink
+import com.example.ui.theme.*
 import com.example.ui.viewmodel.PlayerUiState
 
 @Composable
@@ -67,6 +65,10 @@ fun NowPlayingScreen(
     onTimeProgress: (Float, Float) -> Unit,
     onTrackEnded: () -> Unit,
     onError: (Int) -> Unit,
+    radioState: com.example.ui.viewmodel.RadioState = com.example.ui.viewmodel.RadioState(),
+    onStartRadio: ((Track) -> Unit)? = null,
+    onStopRadio: (() -> Unit)? = null,
+    onRetryRadio: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val track = playerState.currentTrack ?: return
@@ -140,21 +142,52 @@ fun NowPlayingScreen(
                 )
             }
 
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "NOW PLAYING",
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 1.sp
-                )
-                Text(
-                    text = if (playerState.playbackType == PlaybackType.DIRECT_AUDIO) "JIOSAAVN 320KBPS" else "YOUTUBE STREAM",
-                    color = if (playerState.playbackType == PlaybackType.DIRECT_AUDIO) NeonCyan else NeonLime,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace
-                )
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.weight(1f, fill = false).padding(horizontal = 8.dp)
+            ) {
+                if (playerState.isRadioActive || radioState.isRadioActive) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(NyxPurpleLight)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "RADIO",
+                            color = NyxPurpleLight,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 1.2.sp
+                        )
+                    }
+                    val seedTitle = radioState.seedTrack?.title ?: playerState.radioSeedTrack?.title ?: track.title
+                    Text(
+                        text = "Based on: $seedTitle",
+                        color = NyxPurpleLight.copy(alpha = 0.8f),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                } else {
+                    Text(
+                        text = "NOW PLAYING",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 1.sp
+                    )
+                    Text(
+                        text = if (playerState.playbackType == PlaybackType.DIRECT_AUDIO) "JIOSAAVN 320KBPS" else "YOUTUBE STREAM",
+                        color = if (playerState.playbackType == PlaybackType.DIRECT_AUDIO) NeonCyan else NeonLime,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
             }
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -497,19 +530,60 @@ fun NowPlayingScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Dedicated Autoplay Mode Pill Toggle
+            // Dedicated Autoplay & Radio Mode Pills
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
+                horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Radio Button
+                val isRadioOn = playerState.isRadioActive || radioState.isRadioActive
+                Surface(
+                    onClick = {
+                        if (isRadioOn) {
+                            onStopRadio?.invoke()
+                        } else {
+                            onStartRadio?.invoke(track)
+                        }
+                    },
+                    shape = RoundedCornerShape(20.dp),
+                    color = if (isRadioOn) NyxPurple.copy(alpha = 0.22f) else MaterialTheme.colorScheme.surfaceVariant,
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.2.dp,
+                        if (isRadioOn) NyxPurpleLight else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                    ),
+                    modifier = Modifier.testTag("now_playing_radio_btn")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Radio,
+                            contentDescription = "Radio",
+                            tint = if (isRadioOn) NyxPurpleLight else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isRadioOn) "RADIO ON" else "RADIO",
+                            color = if (isRadioOn) NyxPurpleLight else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            letterSpacing = 0.5.sp
+                        )
+                    }
+                }
+
+                // Autoplay Toggle
                 Surface(
                     onClick = onToggleAutoplay,
                     shape = RoundedCornerShape(20.dp),
-                    color = if (playerState.isAutoplayEnabled) NeonLime.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant,
+                    color = if (playerState.isAutoplayEnabled) NyxPurple.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant,
                     border = androidx.compose.foundation.BorderStroke(
                         1.2.dp,
-                        if (playerState.isAutoplayEnabled) NeonLime else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                        if (playerState.isAutoplayEnabled) NyxPurpleLight else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
                     ),
                     modifier = Modifier.testTag("autoplay_toggle_btn")
                 ) {
@@ -520,13 +594,13 @@ fun NowPlayingScreen(
                         Icon(
                             imageVector = Icons.Default.Bolt,
                             contentDescription = "Autoplay",
-                            tint = if (playerState.isAutoplayEnabled) NeonLime else MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = if (playerState.isAutoplayEnabled) NyxPurpleLight else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = if (playerState.isAutoplayEnabled) "AUTOPLAY ON" else "AUTOPLAY OFF",
-                            color = if (playerState.isAutoplayEnabled) NeonLime else MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = if (playerState.isAutoplayEnabled) NyxPurpleLight else MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace,
@@ -584,6 +658,71 @@ fun NowPlayingScreen(
                         .fillMaxWidth()
                         .padding(top = 16.dp)
                 ) {
+                    // Header indicating Radio Queue or Regular Queue
+                    if (playerState.isRadioActive || radioState.isRadioActive) {
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = NyxPurple.copy(alpha = 0.14f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, NyxPurple.copy(alpha = 0.45f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.Radio,
+                                            contentDescription = null,
+                                            tint = NyxPurpleLight,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "RADIO QUEUE",
+                                            color = NyxPurpleLight,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            letterSpacing = 1.sp
+                                        )
+                                    }
+
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        if (onStopRadio != null) {
+                                            TextButton(onClick = onStopRadio) {
+                                                Text("Stop Radio", color = NyxPink, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                        TextButton(onClick = onClearQueue) {
+                                            Text("Clear", color = NyxPurpleLight, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+
+                                val seed = radioState.seedTrack?.title ?: playerState.radioSeedTrack?.title ?: track.title
+                                Text(
+                                    text = "Based on: $seed",
+                                    color = NyxPurpleLight.copy(alpha = 0.85f),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "NOW PLAYING: ${track.title}",
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -597,22 +736,62 @@ fun NowPlayingScreen(
                             fontFamily = FontFamily.Monospace
                         )
 
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            TextButton(onClick = onToggleAutoplay) {
-                                Text(
-                                    text = if (playerState.isAutoplayEnabled) "⚡ AUTOPLAY ON" else "AUTOPLAY OFF",
-                                    color = if (playerState.isAutoplayEnabled) NeonLime else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                            TextButton(onClick = onClearQueue) {
-                                Text("Clear", color = NeonLime, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        if (!playerState.isRadioActive && !radioState.isRadioActive) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                TextButton(onClick = onToggleAutoplay) {
+                                    Text(
+                                        text = if (playerState.isAutoplayEnabled) "⚡ AUTOPLAY ON" else "AUTOPLAY OFF",
+                                        color = if (playerState.isAutoplayEnabled) NyxPurpleLight else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                TextButton(onClick = onClearQueue) {
+                                    Text("Clear", color = NyxPurpleLight, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    // Radio loading or error status in queue
+                    if (radioState.isLoading) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(color = NyxPurple, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Finding similar music...",
+                                color = NyxPurpleLight,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    } else if (radioState.error != null) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = radioState.error,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 12.sp
+                            )
+                            if (onRetryRadio != null) {
+                                TextButton(onClick = onRetryRadio) {
+                                    Text("Try Again", color = NyxPurpleLight, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
 
                     playerState.queue.forEachIndexed { idx, qTrack ->
                         Surface(
@@ -746,6 +925,7 @@ fun NowPlayingScreen(
                             onFavoriteToggle = { onToggleFavorite(recTrack) },
                             onAddToQueue = { /* Queued directly */ },
                             onAddToPlaylist = {},
+                            onStartRadio = onStartRadio?.let { sr -> { sr(recTrack) } },
                             modifier = Modifier.padding(vertical = 4.dp)
                         )
                     }

@@ -40,7 +40,8 @@ fun TrackCard(
     onAddToPlaylist: () -> Unit,
     modifier: Modifier = Modifier,
     isPlaying: Boolean = false,
-    trackIndex: Int? = null
+    trackIndex: Int? = null,
+    onStartRadio: (() -> Unit)? = null
 ) {
     val isSaavn = track.sourceId.contains("SAAVN", ignoreCase = true)
     val cardBorderColor by animateColorAsState(
@@ -160,6 +161,23 @@ fun TrackCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
+                // Radio Button (44dp target)
+                if (onStartRadio != null) {
+                    IconButton(
+                        onClick = onStartRadio,
+                        modifier = Modifier
+                            .size(44.dp)
+                            .testTag("track_radio_btn_${track.videoId}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Radio,
+                            contentDescription = "Start Radio",
+                            tint = NyxPurpleLight,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+
                 // Favorite Button (44dp target)
                 IconButton(
                     onClick = onFavoriteToggle,

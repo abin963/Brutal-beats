@@ -52,6 +52,7 @@ fun SearchScreen(
     onFavoriteToggle: (Track) -> Unit,
     onAddToQueue: (Track) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
+    onStartRadio: (Track) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val focusManager = LocalFocusManager.current
@@ -325,7 +326,8 @@ fun SearchScreen(
                     onPlay = { onPlayTrack(track, searchResults) },
                     onFavoriteToggle = { onFavoriteToggle(track) },
                     onAddToQueue = { onAddToQueue(track) },
-                    onAddToPlaylist = { onAddToPlaylist(track) }
+                    onAddToPlaylist = { onAddToPlaylist(track) },
+                    onStartRadio = { onStartRadio(track) }
                 )
             }
         } else if (searchQuery.isNotBlank()) {

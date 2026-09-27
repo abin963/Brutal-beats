@@ -32,6 +32,7 @@ fun HistoryScreen(
     onAddToQueue: (Track) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
     onClearHistory: () -> Unit,
+    onStartRadio: (Track) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showClearDialog by remember { mutableStateOf(false) }
@@ -130,7 +131,8 @@ fun HistoryScreen(
                         onPlay = { onPlayTrack(track, history) },
                         onFavoriteToggle = { onFavoriteToggle(track) },
                         onAddToQueue = { onAddToQueue(track) },
-                        onAddToPlaylist = { onAddToPlaylist(track) }
+                        onAddToPlaylist = { onAddToPlaylist(track) },
+                        onStartRadio = { onStartRadio(track) }
                     )
                 }
             }

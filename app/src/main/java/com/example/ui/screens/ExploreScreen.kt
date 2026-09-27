@@ -48,6 +48,7 @@ fun ExploreScreen(
     onFavoriteToggle: (Track) -> Unit,
     onAddToQueue: (Track) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
+    onStartRadio: (Track) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -289,7 +290,8 @@ fun ExploreScreen(
                     onPlay = { onPlayTrack(track, tracks) },
                     onFavoriteToggle = { onFavoriteToggle(track) },
                     onAddToQueue = { onAddToQueue(track) },
-                    onAddToPlaylist = { onAddToPlaylist(track) }
+                    onAddToPlaylist = { onAddToPlaylist(track) },
+                    onStartRadio = { onStartRadio(track) }
                 )
             }
         }

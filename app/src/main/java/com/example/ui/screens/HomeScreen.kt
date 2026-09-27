@@ -53,6 +53,7 @@ fun HomeScreen(
     onAddToQueue: (Track) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
     onClearSearch: () -> Unit,
+    onStartRadio: (Track) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var selectedCategory by remember { mutableStateOf("For You") }
@@ -173,7 +174,8 @@ fun HomeScreen(
                             onPlay = { onPlayTrack(track, searchResults) },
                             onFavoriteToggle = { onFavoriteToggle(track) },
                             onAddToQueue = { onAddToQueue(track) },
-                            onAddToPlaylist = { onAddToPlaylist(track) }
+                            onAddToPlaylist = { onAddToPlaylist(track) },
+                            onStartRadio = { onStartRadio(track) }
                         )
                     }
                 }
@@ -357,31 +359,60 @@ fun HomeScreen(
 
                                         Spacer(modifier = Modifier.height(14.dp))
 
-                                        // "Start Listening" Pill Button (48dp height)
-                                        Button(
-                                            onClick = { onPlayTrack(featuredTrack, tracks) },
-                                            shape = RoundedCornerShape(24.dp),
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = NyxPurple
-                                            ),
-                                            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
-                                            modifier = Modifier
-                                                .height(48.dp)
-                                                .testTag("start_listening_button")
+                                        // "Start Listening" & "Radio" Buttons
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
-                                            Icon(
-                                                imageVector = if (isFeaturedPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                                contentDescription = null,
-                                                tint = Color.White,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text(
-                                                text = if (isFeaturedPlaying) "Pause" else "Start Listening",
-                                                color = Color.White,
-                                                fontSize = 14.sp,
-                                                fontWeight = FontWeight.Bold
-                                            )
+                                            Button(
+                                                onClick = { onPlayTrack(featuredTrack, tracks) },
+                                                shape = RoundedCornerShape(24.dp),
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = NyxPurple
+                                                ),
+                                                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
+                                                modifier = Modifier
+                                                    .height(48.dp)
+                                                    .testTag("start_listening_button")
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (isFeaturedPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                                    contentDescription = null,
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = if (isFeaturedPlaying) "Pause" else "Start Listening",
+                                                    color = Color.White,
+                                                    fontSize = 14.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+
+                                            OutlinedButton(
+                                                onClick = { onStartRadio(featuredTrack) },
+                                                shape = RoundedCornerShape(24.dp),
+                                                border = androidx.compose.foundation.BorderStroke(1.2.dp, NyxPurpleLight),
+                                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
+                                                modifier = Modifier
+                                                    .height(48.dp)
+                                                    .testTag("featured_radio_button")
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Radio,
+                                                    contentDescription = "Radio",
+                                                    tint = NyxPurpleLight,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = "Radio",
+                                                    color = Color.White,
+                                                    fontSize = 13.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -452,7 +483,8 @@ fun HomeScreen(
                             onPlay = { onPlayTrack(track, tracks) },
                             onFavoriteToggle = { onFavoriteToggle(track) },
                             onAddToQueue = { onAddToQueue(track) },
-                            onAddToPlaylist = { onAddToPlaylist(track) }
+                            onAddToPlaylist = { onAddToPlaylist(track) },
+                            onStartRadio = { onStartRadio(track) }
                         )
                     }
                 }
@@ -490,7 +522,8 @@ fun HomeScreen(
                                 HorizontalTrackCard(
                                     track = track,
                                     isPlaying = isPlaying && track.videoId == currentPlayingVideoId,
-                                    onPlay = { onPlayTrack(track, recentTracks) }
+                                    onPlay = { onPlayTrack(track, recentTracks) },
+                                    onStartRadio = { onStartRadio(track) }
                                 )
                             }
                         }
@@ -530,7 +563,8 @@ fun HomeScreen(
                                 HorizontalTrackCard(
                                     track = track,
                                     isPlaying = isPlaying && track.videoId == currentPlayingVideoId,
-                                    onPlay = { onPlayTrack(track, favoriteTracks) }
+                                    onPlay = { onPlayTrack(track, favoriteTracks) },
+                                    onStartRadio = { onStartRadio(track) }
                                 )
                             }
                         }
@@ -557,7 +591,8 @@ fun HomeScreen(
                             onPlay = { onPlayTrack(track, tracks) },
                             onFavoriteToggle = { onFavoriteToggle(track) },
                             onAddToQueue = { onAddToQueue(track) },
-                            onAddToPlaylist = { onAddToPlaylist(track) }
+                            onAddToPlaylist = { onAddToPlaylist(track) },
+                            onStartRadio = { onStartRadio(track) }
                         )
                     }
                 }

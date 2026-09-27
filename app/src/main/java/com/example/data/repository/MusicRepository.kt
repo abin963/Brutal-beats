@@ -152,6 +152,59 @@ class MusicRepository(private val database: AppDatabase) {
         filtered
     }
 
+    suspend fun fetchRadioTracks(
+        seedTrack: Track,
+        sourceMode: PreferredSourceMode = PreferredSourceMode.AUTO,
+        excludedIds: Set<String> = emptySet()
+    ): List<Track> = withContext(Dispatchers.IO) {
+        val cleanArtist = seedTrack.artist
+            .replace(" - Topic", "")
+            .replace("VEVO", "")
+            .replace("Official", "", ignoreCase = true)
+            .trim()
+
+        val cleanTitle = seedTrack.title
+            .replace(Regex("\\(.*\\)"), "")
+            .replace(Regex("\\[.*\\]"), "")
+            .trim()
+
+        val candidateList = mutableListOf<Track>()
+
+        coroutineScope {
+            val radioQueryDeferred = if (cleanArtist.isNotBlank() && cleanTitle.isNotBlank()) {
+                async { search("$cleanArtist $cleanTitle radio", sourceMode) }
+            } else null
+
+            val artistHitsDeferred = if (cleanArtist.isNotBlank() && cleanArtist != "YOUTUBE" && cleanArtist != "ARTIST") {
+                async { search("$cleanArtist hits", sourceMode) }
+            } else null
+
+            val similarDeferred = if (cleanTitle.isNotBlank()) {
+                async { search("$cleanTitle similar songs", sourceMode) }
+            } else null
+
+            val genreDeferred = if (seedTrack.genre.isNotBlank() && seedTrack.genre != "GENERAL") {
+                async { fetchGenreTracks(seedTrack.genre, sourceMode) }
+            } else null
+
+            try { radioQueryDeferred?.await()?.let { candidateList.addAll(it) } } catch (_: Exception) {}
+            try { similarDeferred?.await()?.let { candidateList.addAll(it) } } catch (_: Exception) {}
+            try { artistHitsDeferred?.await()?.let { candidateList.addAll(it) } } catch (_: Exception) {}
+            try { genreDeferred?.await()?.let { candidateList.addAll(it) } } catch (_: Exception) {}
+        }
+
+        // Filter out seed track, excluded IDs, empty titles, and deduplicate
+        val filtered = candidateList
+            .filter { it.videoId != seedTrack.videoId && it.videoId !in excludedIds && it.title.isNotBlank() }
+            .distinctBy { "${it.title.lowercase().trim()}_${it.artist.lowercase().trim()}" }
+            .take(15)
+
+        if (filtered.isNotEmpty()) {
+            trackDao.insertTracks(filtered.map { TrackEntity.fromTrack(it) })
+        }
+        filtered
+    }
+
     suspend fun toggleFavorite(track: Track): Boolean = withContext(Dispatchers.IO) {
         val current = trackDao.getTrack(track.videoId)
         val newFav = if (current != null) !current.isFavorite else true

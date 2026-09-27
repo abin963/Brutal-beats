@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -33,7 +34,8 @@ fun HorizontalTrackCard(
     track: Track,
     onPlay: () -> Unit,
     modifier: Modifier = Modifier,
-    isPlaying: Boolean = false
+    isPlaying: Boolean = false,
+    onStartRadio: (() -> Unit)? = null
 ) {
     val isSaavn = track.sourceId.contains("SAAVN", ignoreCase = true)
 
@@ -126,6 +128,31 @@ fun HorizontalTrackCard(
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace
                     )
+                }
+
+                // Radio Button top-right (if enabled)
+                if (onStartRadio != null) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(6.dp)
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.75f))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = ripple(bounded = true, radius = 16.dp),
+                                onClick = onStartRadio
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Radio,
+                            contentDescription = "Start Radio",
+                            tint = NyxPurpleLight,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
             }
 

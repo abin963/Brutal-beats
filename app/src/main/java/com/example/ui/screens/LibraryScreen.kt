@@ -50,6 +50,7 @@ fun LibraryScreen(
     onOpenPlaylist: (PlaylistEntity) -> Unit,
     onClosePlaylist: () -> Unit,
     onRemoveTrackFromPlaylist: (Long, String) -> Unit,
+    onStartRadio: (Track) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var subTab by remember { mutableStateOf(LibrarySubTab.FAVORITES) }
@@ -79,7 +80,8 @@ fun LibraryScreen(
                 onAddToQueue = onAddToQueue,
                 onRemoveTrack = { videoId ->
                     onRemoveTrackFromPlaylist(selectedPlaylist.id, videoId)
-                }
+                },
+                onStartRadio = onStartRadio
             )
         } else {
             Spacer(modifier = Modifier.height(10.dp))
@@ -123,7 +125,8 @@ fun LibraryScreen(
                         isPlaying = isPlaying,
                         onPlayTrack = onPlayTrack,
                         onFavoriteToggle = onFavoriteToggle,
-                        onAddToQueue = onAddToQueue
+                        onAddToQueue = onAddToQueue,
+                        onStartRadio = onStartRadio
                     )
                 }
                 LibrarySubTab.PLAYLISTS -> {
@@ -198,7 +201,8 @@ private fun FavoritesList(
     isPlaying: Boolean,
     onPlayTrack: (Track, List<Track>) -> Unit,
     onFavoriteToggle: (Track) -> Unit,
-    onAddToQueue: (Track) -> Unit
+    onAddToQueue: (Track) -> Unit,
+    onStartRadio: (Track) -> Unit = {}
 ) {
     if (favorites.isEmpty()) {
         Box(
@@ -274,7 +278,8 @@ private fun FavoritesList(
                     onPlay = { onPlayTrack(track, favorites) },
                     onFavoriteToggle = { onFavoriteToggle(track) },
                     onAddToQueue = { onAddToQueue(track) },
-                    onAddToPlaylist = {}
+                    onAddToPlaylist = {},
+                    onStartRadio = { onStartRadio(track) }
                 )
             }
         }
@@ -432,7 +437,8 @@ private fun PlaylistDetailView(
     onPlayTrack: (Track, List<Track>) -> Unit,
     onFavoriteToggle: (Track) -> Unit,
     onAddToQueue: (Track) -> Unit,
-    onRemoveTrack: (String) -> Unit
+    onRemoveTrack: (String) -> Unit,
+    onStartRadio: (Track) -> Unit = {}
 ) {
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -511,7 +517,8 @@ private fun PlaylistDetailView(
                     onPlay = { onPlayTrack(track, tracks) },
                     onFavoriteToggle = { onFavoriteToggle(track) },
                     onAddToQueue = { onAddToQueue(track) },
-                    onAddToPlaylist = { onRemoveTrack(track.videoId) }
+                    onAddToPlaylist = { onRemoveTrack(track.videoId) },
+                    onStartRadio = { onStartRadio(track) }
                 )
             }
         }

@@ -24,6 +24,7 @@ class PlayerActivity : ComponentActivity() {
                 val playerState by viewModel.playerState.collectAsStateWithLifecycle()
                 val recommendations by viewModel.recommendations.collectAsStateWithLifecycle()
                 val isLoadingRecommendations by viewModel.isLoadingRecommendations.collectAsStateWithLifecycle()
+                val radioState by viewModel.radioState.collectAsStateWithLifecycle()
 
                 NowPlayingScreen(
                     playerState = playerState,
@@ -61,7 +62,11 @@ class PlayerActivity : ComponentActivity() {
                     },
                     onError = {
                         viewModel.showMessage("PLAYBACK ERROR (CODE $it)")
-                    }
+                    },
+                    radioState = radioState,
+                    onStartRadio = { viewModel.startRadio(it) },
+                    onStopRadio = { viewModel.stopRadio() },
+                    onRetryRadio = { viewModel.retryRadioFetch() }
                 )
             }
         }
