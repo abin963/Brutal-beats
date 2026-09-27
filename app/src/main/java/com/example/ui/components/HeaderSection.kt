@@ -22,6 +22,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -33,9 +34,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.source.PreferredSourceMode
-import com.example.ui.theme.NyxPurple
-import com.example.ui.theme.NyxPurpleLight
-import com.example.ui.theme.ThemeManager
+import com.example.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,7 +68,7 @@ fun HeaderSection(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.background)
+            .background(Color.Transparent)
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
         // TOP HEADER: [ Profile Avatar ]  "Listen Now"  [ Search ] [ Notification/Settings ]
@@ -78,16 +77,24 @@ fun HeaderSection(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Left: Profile/Avatar Button
+            // Left: Glass Profile/Avatar Button
             Box(
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(46.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
-                    .border(1.5.dp, NyxPurple.copy(alpha = 0.6f), CircleShape)
+                    .background(
+                        if (isDark) Color(0x1CFFFFFF) else Color(0xD8FFFFFF)
+                    )
+                    .border(
+                        1.2.dp,
+                        Brush.verticalGradient(
+                            listOf(NyxPurpleLight.copy(alpha = 0.8f), NyxPurple.copy(alpha = 0.3f))
+                        ),
+                        CircleShape
+                    )
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
-                        indication = ripple(bounded = true, radius = 22.dp),
+                        indication = ripple(bounded = true, radius = 23.dp),
                         onClick = { showProfileSheet = true }
                     )
                     .testTag("profile_button"),
@@ -119,7 +126,7 @@ fun HeaderSection(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Search Toggle Button
+                // Glass Search Toggle Button
                 IconButton(
                     onClick = {
                         isSearchExpanded = !isSearchExpanded
@@ -132,12 +139,14 @@ fun HeaderSection(
                         .clip(CircleShape)
                         .background(
                             if (isSearchExpanded || searchQuery.isNotBlank())
-                                NyxPurple.copy(alpha = 0.2f)
-                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                                NyxPurple.copy(alpha = 0.25f)
+                            else if (isDark) Color(0x16FFFFFF) else Color(0x99FFFFFF)
                         )
                         .border(
                             1.dp,
-                            if (isSearchExpanded || searchQuery.isNotBlank()) NyxPurple else Color.Transparent,
+                            if (isSearchExpanded || searchQuery.isNotBlank())
+                                Brush.verticalGradient(listOf(NyxPurpleLight, NyxPurple))
+                            else Brush.verticalGradient(listOf(Color(0x35FFFFFF), Color(0x10FFFFFF))),
                             CircleShape
                         )
                         .testTag("search_toggle_button")
@@ -150,13 +159,18 @@ fun HeaderSection(
                     )
                 }
 
-                // Notification / Settings Quick Button
+                // Glass Notification / Settings Quick Button
                 IconButton(
                     onClick = { showNotificationSheet = true },
                     modifier = Modifier
                         .size(44.dp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                        .background(if (isDark) Color(0x16FFFFFF) else Color(0x99FFFFFF))
+                        .border(
+                            1.dp,
+                            Brush.verticalGradient(listOf(Color(0x35FFFFFF), Color(0x10FFFFFF))),
+                            CircleShape
+                        )
                         .testTag("notifications_button")
                 ) {
                     Box(contentAlignment = Alignment.TopEnd) {
@@ -166,19 +180,20 @@ fun HeaderSection(
                             tint = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(22.dp)
                         )
-                        // Notification dot indicator
+                        // Glowing notification dot indicator
                         Box(
                             modifier = Modifier
-                                .size(7.dp)
+                                .size(8.dp)
                                 .clip(CircleShape)
                                 .background(NyxPurple)
+                                .border(1.dp, Color.White, CircleShape)
                         )
                     }
                 }
             }
         }
 
-        // Animated Search Bar Area
+        // Animated Floating Glass Search Bar Area
         AnimatedVisibility(
             visible = isSearchExpanded || searchQuery.isNotBlank(),
             enter = expandVertically(animationSpec = tween(220)) + fadeIn(animationSpec = tween(180)),
@@ -187,21 +202,57 @@ fun HeaderSection(
             Column(modifier = Modifier.fillMaxWidth()) {
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Modern Translucent Search Input Field
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.5.dp,
-                        if (searchQuery.isNotEmpty()) NyxPurple else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
-                    ),
-                    tonalElevation = 4.dp
+                // Modern Floating Glass Search Input Field
+                val searchShape = RoundedCornerShape(20.dp)
+                val searchBg = if (isDark) {
+                    Brush.verticalGradient(
+                        listOf(
+                            Color(0xE0181432),
+                            Color(0xF00F0C22)
+                        )
+                    )
+                } else {
+                    Brush.verticalGradient(
+                        listOf(
+                            Color(0xF5FFFFFF),
+                            Color(0xE5F3EFFE)
+                        )
+                    )
+                }
+
+                val searchBorder = if (searchQuery.isNotEmpty()) {
+                    Brush.verticalGradient(
+                        listOf(NyxPurpleLight, NyxPurple.copy(alpha = 0.6f))
+                    )
+                } else {
+                    if (isDark) {
+                        Brush.verticalGradient(
+                            listOf(Color(0x35FFFFFF), NyxPurple.copy(alpha = 0.25f))
+                        )
+                    } else {
+                        Brush.verticalGradient(
+                            listOf(NyxPurple.copy(alpha = 0.4f), Color(0x18DCD6EF))
+                        )
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .shadow(
+                            elevation = 8.dp,
+                            shape = searchShape,
+                            spotColor = if (searchQuery.isNotEmpty()) NyxPurple else Color(0x18A855F7),
+                            ambientColor = Color(0x22000000)
+                        )
+                        .clip(searchShape)
+                        .background(searchBg, searchShape)
+                        .border(1.dp, searchBorder, searchShape)
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 2.dp),
+                            .padding(horizontal = 14.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
@@ -266,8 +317,14 @@ fun HeaderSection(
                         // Search Submit Button (min 44dp touch target)
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(if (isSearching) MaterialTheme.colorScheme.surfaceVariant else NyxPurple)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(
+                                    if (isSearching) {
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                    } else {
+                                        Brush.linearGradient(listOf(NyxPurple, NyxPurpleLight))
+                                    }
+                                )
                                 .clickable {
                                     focusManager.clearFocus()
                                     onSearchSubmit(searchQuery)
@@ -287,7 +344,7 @@ fun HeaderSection(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Engine Source Selector Pills
+                // Engine Source Selector Glass Pills
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -304,24 +361,33 @@ fun HeaderSection(
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         PreferredSourceMode.entries.forEach { mode ->
                             val isSelected = preferredSourceMode == mode
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = if (isSelected) NyxPurple else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                            val chipShape = RoundedCornerShape(12.dp)
+                            Box(
                                 modifier = Modifier
+                                    .clip(chipShape)
+                                    .background(
+                                        if (isSelected) {
+                                            Brush.horizontalGradient(listOf(NyxPurple, NyxPurpleLight))
+                                        } else {
+                                            if (isDark) Color(0x18FFFFFF) else Color(0x99EDE9FE)
+                                        },
+                                        chipShape
+                                    )
+                                    .border(
+                                        1.dp,
+                                        if (isSelected) NyxPurpleLight else Color(0x25A855F7),
+                                        chipShape
+                                    )
                                     .clickable { onSourceModeChanged(mode) }
-                                    .testTag("source_mode_${mode.name.lowercase()}"),
-                                border = androidx.compose.foundation.BorderStroke(
-                                    1.dp,
-                                    if (isSelected) NyxPurple else MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
-                                )
+                                    .padding(horizontal = 10.dp, vertical = 5.dp)
+                                    .testTag("source_mode_${mode.name.lowercase()}")
                             ) {
                                 Text(
                                     text = mode.name,
                                     color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.Monospace,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                    fontFamily = FontFamily.Monospace
                                 )
                             }
                         }
@@ -336,22 +402,27 @@ fun HeaderSection(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         items(searchSuggestions) { suggestion ->
-                            Surface(
-                                shape = RoundedCornerShape(20.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, NyxPurple.copy(alpha = 0.25f)),
-                                modifier = Modifier.clickable {
-                                    onSearchQueryChange(suggestion)
-                                    onSearchSubmit(suggestion)
-                                    focusManager.clearFocus()
-                                }
+                            val sugShape = RoundedCornerShape(20.dp)
+                            Box(
+                                modifier = Modifier
+                                    .clip(sugShape)
+                                    .background(
+                                        if (isDark) Color(0x16FFFFFF) else Color(0x99EDE9FE),
+                                        sugShape
+                                    )
+                                    .border(1.dp, NyxPurple.copy(alpha = 0.3f), sugShape)
+                                    .clickable {
+                                        onSearchQueryChange(suggestion)
+                                        onSearchSubmit(suggestion)
+                                        focusManager.clearFocus()
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
                             ) {
                                 Text(
                                     text = "↗ $suggestion",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
                             }
                         }

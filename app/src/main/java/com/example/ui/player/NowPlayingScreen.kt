@@ -5,6 +5,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -33,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.Track
 import com.example.source.PlaybackType
+import com.example.ui.components.AmbientBackgroundLayer
 import com.example.ui.components.BrutalThumbnail
 import com.example.ui.components.TrackCard
 import com.example.ui.theme.*
@@ -111,13 +113,20 @@ fun NowPlayingScreen(
 
     val sliderFraction = (displayCurrentSec / totalSec).coerceIn(0f, 1f)
 
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .statusBarsPadding()
-            .navigationBarsPadding()
+            .background(DarkBackground)
     ) {
+        // Immersive Ambient Blurred Artwork Background
+        AmbientBackgroundLayer(artworkUrl = track.thumbnailUrl)
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+        ) {
         // Top Action Bar: [Minimize] [NOW PLAYING & Source Info] [Video/Cover Toggle] [Favorite]
         Row(
             modifier = Modifier
@@ -383,7 +392,7 @@ fun NowPlayingScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Smooth Progress Bar & Timestamps
+            // Smooth Liquid Glass Progress Bar & Timestamps
             Slider(
                 value = sliderFraction,
                 onValueChange = { frac ->
@@ -401,9 +410,9 @@ fun NowPlayingScreen(
                     .fillMaxWidth()
                     .testTag("player_progress_slider"),
                 colors = SliderDefaults.colors(
-                    thumbColor = NeonLime,
-                    activeTrackColor = NeonLime,
-                    inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant
+                    thumbColor = NyxPurpleLight,
+                    activeTrackColor = NyxPurple,
+                    inactiveTrackColor = Color(0x33FFFFFF)
                 )
             )
 
@@ -424,7 +433,7 @@ fun NowPlayingScreen(
                         fontSize = 10.sp,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold,
-                        color = NeonLime
+                        color = NyxPurpleLight
                     )
                 }
                 Text(
@@ -438,7 +447,7 @@ fun NowPlayingScreen(
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // Central Playback Controls: [Shuffle] [Prev] [GIANT PLAY/PAUSE] [Next] [Repeat]
+            // Central Playback Controls: [Shuffle] [Prev] [GIANT LIQUID GLASS PLAY/PAUSE] [Next] [Repeat]
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly,
@@ -447,12 +456,15 @@ fun NowPlayingScreen(
                 // Shuffle Button
                 IconButton(
                     onClick = onToggleShuffle,
-                    modifier = Modifier.size(48.dp)
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(if (playerState.isShuffling) NyxPurple.copy(alpha = 0.25f) else Color(0x1AFFFFFF))
                 ) {
                     Icon(
                         imageVector = Icons.Default.Shuffle,
                         contentDescription = "Shuffle",
-                        tint = if (playerState.isShuffling) NeonLime else MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = if (playerState.isShuffling) NyxPurpleLight else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -460,26 +472,40 @@ fun NowPlayingScreen(
                 // Previous Button
                 IconButton(
                     onClick = onPrevious,
-                    modifier = Modifier.size(52.dp)
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(CircleShape)
+                        .background(Color(0x1AFFFFFF))
                 ) {
                     Icon(
                         imageVector = Icons.Default.SkipPrevious,
                         contentDescription = "Previous Track",
                         tint = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(30.dp)
                     )
                 }
 
-                // Giant 68dp Circular Play/Pause Button
+                // Giant 68dp Circular Liquid Glass Play/Pause Button
                 Box(
                     modifier = Modifier
                         .size(68.dp)
                         .scale(playButtonScale)
                         .clip(CircleShape)
-                        .background(NeonLime)
+                        .background(
+                            Brush.linearGradient(
+                                listOf(NyxPurple, NyxPurpleLight)
+                            )
+                        )
+                        .border(
+                            1.5.dp,
+                            Brush.verticalGradient(
+                                listOf(Color.White.copy(alpha = 0.6f), Color.White.copy(alpha = 0.15f))
+                            ),
+                            CircleShape
+                        )
                         .clickable(
                             interactionSource = playInteractionSource,
-                            indication = ripple(),
+                            indication = ripple(bounded = true, radius = 34.dp),
                             onClick = onPlayPause
                         )
                         .testTag("overlay_play_pause_button"),
@@ -489,13 +515,13 @@ fun NowPlayingScreen(
                         CircularProgressIndicator(
                             modifier = Modifier.size(32.dp),
                             strokeWidth = 3.dp,
-                            color = Color.Black
+                            color = Color.White
                         )
                     } else {
                         Icon(
                             imageVector = if (playerState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                             contentDescription = if (playerState.isPlaying) "Pause" else "Play",
-                            tint = Color.Black,
+                            tint = Color.White,
                             modifier = Modifier.size(38.dp)
                         )
                     }
@@ -504,25 +530,31 @@ fun NowPlayingScreen(
                 // Next Button
                 IconButton(
                     onClick = onNext,
-                    modifier = Modifier.size(52.dp)
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(CircleShape)
+                        .background(Color(0x1AFFFFFF))
                 ) {
                     Icon(
                         imageVector = Icons.Default.SkipNext,
                         contentDescription = "Next Track",
                         tint = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(30.dp)
                     )
                 }
 
                 // Loop Button
                 IconButton(
                     onClick = onToggleLoop,
-                    modifier = Modifier.size(48.dp)
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(if (playerState.isLooping) NyxPurple.copy(alpha = 0.25f) else Color(0x1AFFFFFF))
                 ) {
                     Icon(
                         imageVector = Icons.Default.Repeat,
                         contentDescription = "Repeat",
-                        tint = if (playerState.isLooping) NeonLime else MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = if (playerState.isLooping) NyxPurpleLight else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -935,6 +967,7 @@ fun NowPlayingScreen(
             Spacer(modifier = Modifier.height(32.dp))
         }
     }
+}
 }
 
 private fun formatTime(seconds: Float): String {

@@ -62,24 +62,24 @@ fun NowPlayingBottomBar(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 4.dp)
+            .padding(horizontal = 14.dp, vertical = 6.dp)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = ripple(),
                 onClick = onExpand
             )
             .testTag("now_playing_bottom_bar"),
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+        shape = RoundedCornerShape(26.dp),
+        color = Color(0xD9130F26),
         tonalElevation = 8.dp,
-        shadowElevation = 8.dp,
+        shadowElevation = 12.dp,
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
-            Brush.horizontalGradient(
+            Brush.verticalGradient(
                 listOf(
-                    NyxPurple.copy(alpha = 0.45f),
-                    NyxPurpleLight.copy(alpha = 0.2f),
-                    NyxPurple.copy(alpha = 0.45f)
+                    Color.White.copy(alpha = 0.35f),
+                    NyxPurple.copy(alpha = 0.5f),
+                    Color.White.copy(alpha = 0.15f)
                 )
             )
         )

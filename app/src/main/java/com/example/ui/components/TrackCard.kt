@@ -59,13 +59,21 @@ fun TrackCard(
                 onClick = onPlay
             )
             .testTag("track_card_${track.videoId}"),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = if (isPlaying) 0.95f else 0.85f),
+        shape = RoundedCornerShape(18.dp),
+        color = if (isPlaying) Color(0xD91D1638) else Color(0x99130F24),
         tonalElevation = if (isPlaying) 6.dp else 2.dp,
-        shadowElevation = if (isPlaying) 6.dp else 1.dp,
+        shadowElevation = if (isPlaying) 8.dp else 2.dp,
         border = androidx.compose.foundation.BorderStroke(
-            if (isPlaying) 1.5.dp else 1.dp,
-            cardBorderColor
+            1.dp,
+            if (isPlaying) {
+                androidx.compose.ui.graphics.Brush.verticalGradient(
+                    listOf(NyxPurpleLight, NyxPurple, Color(0x33A855F7))
+                )
+            } else {
+                androidx.compose.ui.graphics.Brush.verticalGradient(
+                    listOf(Color.White.copy(alpha = 0.22f), Color.White.copy(alpha = 0.05f))
+                )
+            }
         )
     ) {
         Row(

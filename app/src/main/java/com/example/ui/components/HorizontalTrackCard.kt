@@ -47,13 +47,19 @@ fun HorizontalTrackCard(
                 indication = ripple(),
                 onClick = onPlay
             ),
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
-        tonalElevation = 3.dp,
-        shadowElevation = 3.dp,
+        shape = RoundedCornerShape(20.dp),
+        color = Color(0xB3140F28),
+        tonalElevation = 4.dp,
+        shadowElevation = 6.dp,
         border = androidx.compose.foundation.BorderStroke(
-            if (isPlaying) 1.5.dp else 1.dp,
-            if (isPlaying) NyxPurple else MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
+            1.dp,
+            if (isPlaying) {
+                Brush.verticalGradient(listOf(NyxPurpleLight, NyxPurple))
+            } else {
+                Brush.verticalGradient(
+                    listOf(Color.White.copy(alpha = 0.25f), Color.White.copy(alpha = 0.05f))
+                )
+            }
         )
     ) {
         Column(

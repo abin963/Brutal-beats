@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -67,12 +68,18 @@ fun BrutalBottomNav(
                 .fillMaxWidth()
                 .height(64.dp),
             shape = RoundedCornerShape(32.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+            color = Color(0xD9100C22),
             tonalElevation = 8.dp,
-            shadowElevation = 10.dp,
+            shadowElevation = 14.dp,
             border = androidx.compose.foundation.BorderStroke(
                 1.dp,
-                NyxPurple.copy(alpha = 0.28f)
+                Brush.verticalGradient(
+                    listOf(
+                        Color.White.copy(alpha = 0.3f),
+                        NyxPurple.copy(alpha = 0.45f),
+                        Color.White.copy(alpha = 0.1f)
+                    )
+                )
             )
         ) {
             Row(

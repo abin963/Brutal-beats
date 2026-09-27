@@ -359,59 +359,77 @@ fun HomeScreen(
 
                                         Spacer(modifier = Modifier.height(14.dp))
 
-                                        // "Start Listening" & "Radio" Buttons
+                                            // "Start Listening" & "Radio" Buttons
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
-                                            Button(
+                                            Surface(
                                                 onClick = { onPlayTrack(featuredTrack, tracks) },
                                                 shape = RoundedCornerShape(24.dp),
-                                                colors = ButtonDefaults.buttonColors(
-                                                    containerColor = NyxPurple
+                                                color = NyxPurple,
+                                                border = androidx.compose.foundation.BorderStroke(
+                                                    1.dp,
+                                                    Brush.verticalGradient(
+                                                        listOf(Color.White.copy(alpha = 0.5f), Color.White.copy(alpha = 0.1f))
+                                                    )
                                                 ),
-                                                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
                                                 modifier = Modifier
                                                     .height(48.dp)
                                                     .testTag("start_listening_button")
                                             ) {
-                                                Icon(
-                                                    imageVector = if (isFeaturedPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                                    contentDescription = null,
-                                                    tint = Color.White,
-                                                    modifier = Modifier.size(20.dp)
-                                                )
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text(
-                                                    text = if (isFeaturedPlaying) "Pause" else "Start Listening",
-                                                    color = Color.White,
-                                                    fontSize = 14.sp,
-                                                    fontWeight = FontWeight.Bold
-                                                )
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Icon(
+                                                        imageVector = if (isFeaturedPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                                        contentDescription = null,
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(20.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text(
+                                                        text = if (isFeaturedPlaying) "Pause" else "Start Listening",
+                                                        color = Color.White,
+                                                        fontSize = 14.sp,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                }
                                             }
 
-                                            OutlinedButton(
+                                            Surface(
                                                 onClick = { onStartRadio(featuredTrack) },
                                                 shape = RoundedCornerShape(24.dp),
-                                                border = androidx.compose.foundation.BorderStroke(1.2.dp, NyxPurpleLight),
-                                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
+                                                color = Color(0x33100B22),
+                                                border = androidx.compose.foundation.BorderStroke(
+                                                    1.dp,
+                                                    Brush.verticalGradient(
+                                                        listOf(NyxPurpleLight.copy(alpha = 0.8f), NyxPurple.copy(alpha = 0.4f))
+                                                    )
+                                                ),
                                                 modifier = Modifier
                                                     .height(48.dp)
                                                     .testTag("featured_radio_button")
                                             ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Radio,
-                                                    contentDescription = "Radio",
-                                                    tint = NyxPurpleLight,
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text(
-                                                    text = "Radio",
-                                                    color = Color.White,
-                                                    fontSize = 13.sp,
-                                                    fontWeight = FontWeight.Bold
-                                                )
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Radio,
+                                                        contentDescription = "Radio",
+                                                        tint = NyxPurpleLight,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text(
+                                                        text = "Radio",
+                                                        color = Color.White,
+                                                        fontSize = 13.sp,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                }
                                             }
                                         }
                                     }

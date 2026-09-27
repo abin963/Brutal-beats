@@ -17,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
@@ -28,6 +29,8 @@ import com.example.data.model.Track
 import com.example.ui.components.TrackCard
 import com.example.ui.theme.NeonLime
 import com.example.ui.theme.NeonPink
+import com.example.ui.theme.NyxPurple
+import com.example.ui.theme.NyxPurpleLight
 
 enum class LibrarySubTab {
     FAVORITES,
@@ -87,30 +90,48 @@ fun LibraryScreen(
             Spacer(modifier = Modifier.height(10.dp))
 
             // Sub-Tabs: [Favorites] [Playlists]
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .padding(4.dp)
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                color = Color(0xB3100C22),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    Brush.verticalGradient(
+                        listOf(Color.White.copy(alpha = 0.25f), Color.White.copy(alpha = 0.05f))
+                    )
+                )
             ) {
-                LibrarySubTab.entries.forEach { tab ->
-                    val isSelected = subTab == tab
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(if (isSelected) NeonLime else Color.Transparent)
-                            .clickable { subTab = tab }
-                            .padding(vertical = 10.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = if (tab == LibrarySubTab.FAVORITES) "Favorites (${favorites.size})" else "Playlists (${playlists.size})",
-                            color = if (isSelected) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
-                            fontSize = 13.sp
-                        )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(4.dp)
+                ) {
+                    LibrarySubTab.entries.forEach { tab ->
+                        val isSelected = subTab == tab
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(16.dp))
+                                .then(
+                                    if (isSelected) {
+                                        Modifier.background(
+                                            Brush.linearGradient(
+                                                listOf(NyxPurple, NyxPurpleLight)
+                                            )
+                                        )
+                                    } else Modifier
+                                )
+                                .clickable { subTab = tab }
+                                .padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = if (tab == LibrarySubTab.FAVORITES) "Favorites (${favorites.size})" else "Playlists (${playlists.size})",
+                                color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                fontSize = 13.sp
+                            )
+                        }
                     }
                 }
             }
@@ -302,11 +323,16 @@ private fun PlaylistsList(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
+                    .clip(RoundedCornerShape(18.dp))
                     .clickable(onClick = onCreatePlaylistClick)
                     .testTag("create_playlist_btn"),
-                color = MaterialTheme.colorScheme.surface,
-                border = androidx.compose.foundation.BorderStroke(1.dp, NeonLime.copy(alpha = 0.5f))
+                color = Color(0xB3120E26),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    Brush.verticalGradient(
+                        listOf(NyxPurpleLight.copy(alpha = 0.6f), Color.White.copy(alpha = 0.1f))
+                    )
+                )
             ) {
                 Row(
                     modifier = Modifier.padding(16.dp),
@@ -316,13 +342,17 @@ private fun PlaylistsList(
                         modifier = Modifier
                             .size(46.dp)
                             .clip(CircleShape)
-                            .background(NeonLime),
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(NyxPurple, NyxPurpleLight)
+                                )
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Add,
                             contentDescription = "Add Playlist",
-                            tint = Color.Black,
+                            tint = Color.White,
                             modifier = Modifier.size(24.dp)
                         )
                     }
@@ -332,7 +362,7 @@ private fun PlaylistsList(
                     Column {
                         Text(
                             text = "Create Playlist",
-                            color = MaterialTheme.colorScheme.onSurface,
+                            color = Color.White,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold
                         )

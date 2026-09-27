@@ -9,8 +9,17 @@ val NyxPurpleDark = Color(0xFF7E22CE)      // Deep Purple Accent
 val NyxPurpleGlow = Color(0x66A855F7)      // Purple Atmospheric Glow
 val NyxPink = Color(0xFFF43F5E)            // Neon Pink / Favorite Accent
 val NyxCyan = Color(0xFF06B6D4)            // Cyan indicator for high-res / JioSaavn
-val NyxSurfaceGlass = Color(0xCC131024)    // Translucent glass surface
-val NyxSurfaceBorder = Color(0x35A855F7)   // Subtle glowing purple border
+val NyxSurfaceGlass = Color(0xDD120E24)    // Translucent glass surface
+val NyxSurfaceBorder = Color(0x40A855F7)   // Subtle glowing purple border
+
+// Liquid Glass Design System Tokens
+val GlassSurface = Color(0x1AFFFFFF)         // 10% translucent white for glass
+val GlassSurfaceDark = Color(0xB30F0B1E)     // Dark tinted liquid glass
+val GlassSurfaceElevated = Color(0xD917122C) // Elevated glass card
+val GlassBorder = Color(0x2EFFFFFF)          // Crisp specular glass border
+val GlassBorderSubtle = Color(0x1FFFFFFF)    // Subtle glass border
+val GlassHighlight = Color(0x4DFFFFFF)       // Specular top reflection
+val GlassGlow = Color(0x33A855F7)            // Ambient purple glow
 
 // Backward-compatibility aliases mapped to NYX palette
 val NeonLime = NyxPurple
