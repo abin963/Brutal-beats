@@ -1,19 +1,21 @@
 package com.example.source
 
 import android.content.Context
-import android.media.AudioAttributes
-import android.media.MediaPlayer
-import android.os.Handler
-import android.os.Looper
+import android.content.Intent
+import android.os.Build
+import androidx.core.content.ContextCompat
+import com.example.data.model.Track
+import com.example.service.MusicPlayerService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-class AudioPlaybackManager(context: Context) {
+/**
+ * Controller bridging MusicViewModel and MusicPlayerService, ensuring ONE authoritative playback instance.
+ */
+class AudioPlaybackManager(private val context: Context) {
 
     private val appContext = context.applicationContext
-    private var mediaPlayer: MediaPlayer? = null
-    private val mainHandler = Handler(Looper.getMainLooper())
 
     private val _isDirectPlaying = MutableStateFlow(false)
     val isDirectPlaying: StateFlow<Boolean> = _isDirectPlaying.asStateFlow()
@@ -24,116 +26,50 @@ class AudioPlaybackManager(context: Context) {
     private val _duration = MutableStateFlow(0f)
     val duration: StateFlow<Float> = _duration.asStateFlow()
 
-    private var onCompletionCallback: (() -> Unit)? = null
-    private var isUpdatingProgress = false
-
-    private val progressRunnable = object : Runnable {
-        override fun run() {
-            mediaPlayer?.let { mp ->
-                if (mp.isPlaying) {
-                    val posSec = mp.currentPosition / 1000f
-                    val durSec = mp.duration / 1000f
-                    _currentPosition.value = posSec
-                    if (durSec > 0) _duration.value = durSec
-                }
+    private fun ensureServiceStarted(): MusicPlayerService? {
+        var service = MusicPlayerService.getInstance()
+        if (service == null) {
+            val intent = Intent(appContext, MusicPlayerService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                ContextCompat.startForegroundService(appContext, intent)
+            } else {
+                appContext.startService(intent)
             }
-            if (isUpdatingProgress) {
-                mainHandler.postDelayed(this, 250)
-            }
+            service = MusicPlayerService.getInstance()
         }
+        return service
     }
 
-    fun playDirectStream(url: String, onCompletion: () -> Unit, onError: ((Int) -> Unit)? = null) {
-        stop()
-        onCompletionCallback = onCompletion
-        try {
-            val mp = MediaPlayer().apply {
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .build()
-                )
-                setDataSource(url)
-                setOnPreparedListener { player ->
-                    player.start()
-                    _isDirectPlaying.value = true
-                    _duration.value = player.duration / 1000f
-                    startProgressLoop()
-                }
-                setOnCompletionListener {
-                    _isDirectPlaying.value = false
-                    stopProgressLoop()
-                    onCompletionCallback?.invoke()
-                }
-                setOnErrorListener { _, what, _ ->
-                    _isDirectPlaying.value = false
-                    stopProgressLoop()
-                    onError?.invoke(what)
-                    false
-                }
-                prepareAsync()
-            }
-            mediaPlayer = mp
-        } catch (_: Exception) {
-            _isDirectPlaying.value = false
-            onError?.invoke(-1)
-        }
+    fun playDirectStream(track: Track, url: String, onCompletion: () -> Unit, onError: ((Int) -> Unit)? = null) {
+        val service = ensureServiceStarted()
+        MusicPlayerService.onCompletionCallback = onCompletion
+        MusicPlayerService.onErrorCallback = onError
+
+        service?.playDirectStream(track, url)
     }
 
     fun pause() {
-        mediaPlayer?.let {
-            if (it.isPlaying) {
-                it.pause()
-                _isDirectPlaying.value = false
-            }
-        }
-        stopProgressLoop()
+        MusicPlayerService.getInstance()?.pause()
     }
 
     fun resume() {
-        mediaPlayer?.let {
-            it.start()
-            _isDirectPlaying.value = true
-            startProgressLoop()
-        }
+        MusicPlayerService.getInstance()?.resume()
     }
 
     fun seekTo(seconds: Float) {
-        mediaPlayer?.let {
-            val ms = (seconds * 1000).toInt().coerceIn(0, it.duration)
-            it.seekTo(ms)
-            _currentPosition.value = seconds
-        }
+        MusicPlayerService.getInstance()?.seekTo(seconds)
     }
 
     fun setVolume(volume0to100: Float) {
-        val scalar = (volume0to100 / 100f).coerceIn(0f, 1f)
-        mediaPlayer?.setVolume(scalar, scalar)
+        MusicPlayerService.getInstance()?.setVolume(volume0to100)
     }
 
     fun stop() {
-        stopProgressLoop()
-        mediaPlayer?.let {
-            try {
-                if (it.isPlaying) it.stop()
-                it.reset()
-                it.release()
-            } catch (_: Exception) {}
-        }
-        mediaPlayer = null
-        _isDirectPlaying.value = false
-        _currentPosition.value = 0f
+        MusicPlayerService.getInstance()?.stopPlayback()
     }
 
-    private fun startProgressLoop() {
-        isUpdatingProgress = true
-        mainHandler.removeCallbacks(progressRunnable)
-        mainHandler.post(progressRunnable)
-    }
-
-    private fun stopProgressLoop() {
-        isUpdatingProgress = false
-        mainHandler.removeCallbacks(progressRunnable)
+    fun syncForegroundStreamState(track: Track, isPlaying: Boolean, isBuffering: Boolean, currentSec: Float, durationSec: Float) {
+        ensureServiceStarted()
+        MusicPlayerService.getInstance()?.syncForegroundStreamState(track, isPlaying, isBuffering, currentSec, durationSec)
     }
 }

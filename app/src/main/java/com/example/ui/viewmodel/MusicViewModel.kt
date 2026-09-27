@@ -135,38 +135,41 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private var isAdvancingAutoplay = false
 
     init {
-        // Collect direct audio progress from AudioPlaybackManager
+        // Wire system media session & notification callbacks
+        com.example.service.MusicPlayerService.onNextCallback = { advanceToNextTrackOrAutoplay() }
+        com.example.service.MusicPlayerService.onPreviousCallback = { previousTrack() }
+        com.example.service.MusicPlayerService.onPlayPauseCallback = { togglePlayPause() }
+        com.example.service.MusicPlayerService.onSeekCallback = { seekTo(it) }
+
+        // Periodically poll MusicPlayerService if running direct audio
         viewModelScope.launch {
-            audioPlaybackManager.currentPosition.collect { pos ->
-                if (_playerState.value.playbackType == PlaybackType.DIRECT_AUDIO && _playerState.value.isPlaying) {
+            while (true) {
+                val service = com.example.service.MusicPlayerService.getInstance()
+                if (service != null && _playerState.value.playbackType == PlaybackType.DIRECT_AUDIO) {
+                    val isServicePlaying = service.isPlaying.value
+                    val pos = service.currentPositionSec.value
+                    val dur = service.durationSec.value
+
                     val now = System.currentTimeMillis()
-                    if (now - lastSeekTimestamp < 800) {
-                        if (targetSeekSec >= 0f && kotlin.math.abs(pos - targetSeekSec) > 2f) {
-                            return@collect
+                    val allowUpdate = if (now - lastSeekTimestamp < 800) {
+                        targetSeekSec < 0f || kotlin.math.abs(pos - targetSeekSec) <= 2f
+                    } else true
+
+                    if (allowUpdate) {
+                        targetSeekSec = -1f
+                        _playerState.update { current ->
+                            val prev = current.currentPositionSec
+                            val newPos = if (pos >= prev || (prev - pos > 4f)) pos else prev
+                            current.copy(
+                                isPlaying = isServicePlaying,
+                                currentPositionSec = newPos,
+                                totalDurationSec = if (dur > 0f) dur else current.totalDurationSec,
+                                isBuffering = service.isBuffering.value
+                            )
                         }
                     }
-                    targetSeekSec = -1f
-                    _playerState.update { current ->
-                        val prev = current.currentPositionSec
-                        val newPos = if (pos >= prev || (prev - pos > 4f)) pos else prev
-                        current.copy(currentPositionSec = newPos, isBuffering = false)
-                    }
                 }
-            }
-        }
-        viewModelScope.launch {
-            audioPlaybackManager.duration.collect { dur ->
-                if (_playerState.value.playbackType == PlaybackType.DIRECT_AUDIO && dur > 0) {
-                    _playerState.update { it.copy(totalDurationSec = dur) }
-                }
-            }
-        }
-        viewModelScope.launch {
-            audioPlaybackManager.isDirectPlaying.collect { playing ->
-                if (_playerState.value.playbackType == PlaybackType.DIRECT_AUDIO) {
-                    if (playing) consecutiveFailures = 0
-                    _playerState.update { it.copy(isPlaying = playing, isBuffering = false) }
-                }
+                delay(300)
             }
         }
 
@@ -335,12 +338,19 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             // Direct audio playback vs YouTube IFrame playback
             if (resolved.playbackType == PlaybackType.DIRECT_AUDIO && !resolved.streamUrl.isNullOrBlank()) {
                 audioPlaybackManager.playDirectStream(
+                    track = updatedTrack,
                     url = resolved.streamUrl,
                     onCompletion = { onTrackFinished() },
                     onError = { onPlaybackError(it) }
                 )
             } else {
-                audioPlaybackManager.stop()
+                audioPlaybackManager.syncForegroundStreamState(
+                    track = updatedTrack,
+                    isPlaying = true,
+                    isBuffering = true,
+                    currentSec = 0f,
+                    durationSec = initialDuration
+                )
             }
 
             showMessage("NOW PLAYING: [${resolved.sourceName.uppercase()}] ${updatedTrack.title.take(24)}")
@@ -367,6 +377,17 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             consecutiveFailures = 0
         }
         _playerState.update { it.copy(isPlaying = isPlaying, isBuffering = false) }
+        _playerState.value.currentTrack?.let { track ->
+            if (_playerState.value.playbackType == PlaybackType.YOUTUBE_EMBED) {
+                audioPlaybackManager.syncForegroundStreamState(
+                    track = track,
+                    isPlaying = isPlaying,
+                    isBuffering = false,
+                    currentSec = _playerState.value.currentPositionSec,
+                    durationSec = _playerState.value.totalDurationSec
+                )
+            }
+        }
     }
 
     fun setBufferingState(isBuffering: Boolean) {
@@ -515,6 +536,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             if (current.playbackType == PlaybackType.DIRECT_AUDIO) {
                 current.resolvedMedia?.streamUrl?.let { url ->
                     audioPlaybackManager.playDirectStream(
+                        track = track,
                         url = url,
                         onCompletion = { onTrackFinished() },
                         onError = { onPlaybackError(it) }
