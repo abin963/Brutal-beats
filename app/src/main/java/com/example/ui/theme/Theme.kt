@@ -10,13 +10,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.Color
 
 private val DarkColorScheme = darkColorScheme(
-    primary = NeonLime,
-    onPrimary = DarkBackground,
+    primary = NyxPurple,
+    onPrimary = Color.White,
     primaryContainer = NeonLimeContainer,
-    onPrimaryContainer = NeonLime,
-    secondary = NeonCyan,
+    onPrimaryContainer = NyxPurpleLight,
+    secondary = NyxCyan,
     onSecondary = DarkBackground,
-    tertiary = NeonPink,
+    tertiary = NyxPink,
     background = DarkBackground,
     onBackground = DarkTextPrimary,
     surface = DarkSurface,
@@ -24,17 +24,17 @@ private val DarkColorScheme = darkColorScheme(
     surfaceVariant = DarkSurfaceVariant,
     onSurfaceVariant = DarkTextSecondary,
     outline = DarkBorder,
-    outlineVariant = Color(0xFF383844)
+    outlineVariant = Color(0xFF382F5A)
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Color(0xFF00B347),
+    primary = NyxPurple,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFE4FBEA),
-    onPrimaryContainer = Color(0xFF006626),
-    secondary = Color(0xFF007A8A),
+    primaryContainer = Color(0xFFEDE9FE),
+    onPrimaryContainer = Color(0xFF581C87),
+    secondary = NyxCyan,
     onSecondary = Color.White,
-    tertiary = NeonPink,
+    tertiary = NyxPink,
     background = LightBackground,
     onBackground = LightTextPrimary,
     surface = LightSurface,
@@ -42,7 +42,7 @@ private val LightColorScheme = lightColorScheme(
     surfaceVariant = LightSurfaceVariant,
     onSurfaceVariant = LightTextSecondary,
     outline = LightBorder,
-    outlineVariant = Color(0xFFC0C3CE)
+    outlineVariant = Color(0xFFC7BEDF)
 )
 
 @Composable

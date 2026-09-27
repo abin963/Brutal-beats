@@ -173,6 +173,13 @@ fun BrutalBeatsApp(
                         isSearching = uiState.isSearching,
                         preferredSourceMode = uiState.preferredSourceMode,
                         onSourceModeChanged = { viewModel.setPreferredSource(it) },
+                        title = when (uiState.activeTab) {
+                            MainTab.HOME -> "Listen Now"
+                            MainTab.EXPLORE -> "Explore"
+                            MainTab.LIBRARY -> "Your Library"
+                            MainTab.SEARCH -> "Search"
+                            MainTab.HISTORY -> "History"
+                        },
                         modifier = Modifier.statusBarsPadding()
                     )
                 },
@@ -198,7 +205,7 @@ fun BrutalBeatsApp(
                             } else 0f
                         )
 
-                        // Bottom Navigation: HOME / EXPLORE / LIBRARY / HISTORY
+                        // Bottom Navigation: HOME / EXPLORE / LIBRARY / SEARCH
                         BrutalBottomNav(
                             activeTab = uiState.activeTab,
                             onTabSelected = { viewModel.selectTab(it) }
@@ -266,6 +273,26 @@ fun BrutalBeatsApp(
                                 onOpenPlaylist = { viewModel.openPlaylist(it) },
                                 onClosePlaylist = { viewModel.selectTab(MainTab.LIBRARY) },
                                 onRemoveTrackFromPlaylist = { pId, vId -> viewModel.removeTrackFromPlaylist(pId, vId) }
+                            )
+                        }
+
+                        MainTab.SEARCH -> {
+                            com.example.ui.screens.SearchScreen(
+                                searchQuery = uiState.searchQuery,
+                                onSearchQueryChange = { viewModel.updateSearchQuery(it) },
+                                onSearchSubmit = { viewModel.performSearch(it) },
+                                onClearSearch = { viewModel.clearSearch() },
+                                searchResults = uiState.searchResults,
+                                isSearching = uiState.isSearching,
+                                searchSuggestions = uiState.searchSuggestions,
+                                preferredSourceMode = uiState.preferredSourceMode,
+                                onSourceModeChanged = { viewModel.setPreferredSource(it) },
+                                currentPlayingVideoId = playerState.currentTrack?.videoId,
+                                isPlaying = playerState.isPlaying,
+                                onPlayTrack = { track, list -> viewModel.playTrack(track, list) },
+                                onFavoriteToggle = { viewModel.toggleFavorite(it) },
+                                onAddToQueue = { viewModel.addToQueue(it) },
+                                onAddToPlaylist = { trackToAddToPlaylist = it }
                             )
                         }
 

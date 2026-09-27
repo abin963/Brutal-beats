@@ -1,6 +1,8 @@
 package com.example.ui.player
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -20,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
@@ -29,8 +32,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.Track
 import com.example.ui.components.BrutalThumbnail
-import com.example.ui.theme.NeonCyan
-import com.example.ui.theme.NeonLime
+import com.example.ui.theme.NyxCyan
+import com.example.ui.theme.NyxPurple
+import com.example.ui.theme.NyxPurpleLight
 
 @Composable
 fun NowPlayingBottomBar(
@@ -50,57 +54,72 @@ fun NowPlayingBottomBar(
     val isPlayPressed by playInteractionSource.collectIsPressedAsState()
     val playButtonScale by animateFloatAsState(
         targetValue = if (isPlayPressed) 0.92f else 1f,
-        label = "play_scale"
+        animationSpec = tween(150),
+        label = "mini_play_scale"
     )
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 10.dp, vertical = 6.dp)
-            .clickable(onClick = onExpand)
+            .padding(horizontal = 14.dp, vertical = 4.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = ripple(),
+                onClick = onExpand
+            )
             .testTag("now_playing_bottom_bar"),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
         tonalElevation = 8.dp,
-        shadowElevation = 6.dp,
+        shadowElevation = 8.dp,
         border = androidx.compose.foundation.BorderStroke(
-            1.5.dp,
-            MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+            1.dp,
+            Brush.horizontalGradient(
+                listOf(
+                    NyxPurple.copy(alpha = 0.45f),
+                    NyxPurpleLight.copy(alpha = 0.2f),
+                    NyxPurple.copy(alpha = 0.45f)
+                )
+            )
         )
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            // Live Neon Progress Track at top of mini-player
+            // Live NYX Purple Progress Scrubber line at the very top edge
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(3.dp)
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .height(2.5.dp)
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(fraction = progressFraction.coerceIn(0f, 1f))
                         .fillMaxHeight()
-                        .background(NeonLime)
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(NyxPurple, NyxPurpleLight)
+                            )
+                        )
                 )
             }
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Reliable Thumbnail with fallback
+                // Real Artwork Thumbnail
                 BrutalThumbnail(
                     imageUrl = currentTrack.thumbnailUrl,
                     videoId = currentTrack.videoId,
                     sourceId = currentTrack.sourceId,
                     contentDescription = currentTrack.title,
-                    modifier = Modifier.size(50.dp),
-                    shape = RoundedCornerShape(10.dp)
+                    modifier = Modifier.size(48.dp),
+                    shape = RoundedCornerShape(12.dp)
                 )
 
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(12.dp))
 
                 // Song Info
                 Column(
@@ -128,18 +147,18 @@ fun NowPlayingBottomBar(
                             modifier = Modifier.weight(1f, fill = false)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        // Clean mini source pill
+                        // Clean source pill
                         val isSaavn = currentTrack.sourceId.contains("SAAVN", ignoreCase = true)
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(4.dp))
-                                .background(if (isSaavn) NeonCyan.copy(alpha = 0.2f) else NeonLime.copy(alpha = 0.2f))
-                                .border(1.dp, if (isSaavn) NeonCyan else NeonLime, RoundedCornerShape(4.dp))
+                                .background(if (isSaavn) NyxCyan.copy(alpha = 0.18f) else NyxPurple.copy(alpha = 0.18f))
+                                .border(1.dp, (if (isSaavn) NyxCyan else NyxPurple).copy(alpha = 0.6f), RoundedCornerShape(4.dp))
                                 .padding(horizontal = 4.dp, vertical = 1.dp)
                         ) {
                             Text(
                                 text = if (isSaavn) "320K" else "YT",
-                                color = if (isSaavn) NeonCyan else NeonLime,
+                                color = if (isSaavn) NyxCyan else NyxPurpleLight,
                                 fontSize = 8.sp,
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = FontFamily.Monospace
@@ -148,17 +167,16 @@ fun NowPlayingBottomBar(
                     }
                 }
 
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(8.dp))
 
-                // Primary One-Hand Controls: [Prev] [LARGE PLAY/PAUSE] [Next]
+                // Media Controls: [Previous] [Large Play/Pause] [Next]
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    // Previous Button
                     IconButton(
                         onClick = onPrevious,
-                        modifier = Modifier.size(42.dp)
+                        modifier = Modifier.size(44.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.SkipPrevious,
@@ -168,16 +186,20 @@ fun NowPlayingBottomBar(
                         )
                     }
 
-                    // Large 56dp Circular Play/Pause Button
+                    // Large 48dp Circular Play/Pause Button in NYX Purple
                     Box(
                         modifier = Modifier
-                            .size(56.dp)
+                            .size(48.dp)
                             .scale(playButtonScale)
                             .clip(CircleShape)
-                            .background(NeonLime)
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(NyxPurple, NyxPurpleLight)
+                                )
+                            )
                             .clickable(
                                 interactionSource = playInteractionSource,
-                                indication = ripple(),
+                                indication = ripple(bounded = true, radius = 24.dp),
                                 onClick = onPlayPause
                             )
                             .testTag("bar_play_pause_button"),
@@ -186,15 +208,14 @@ fun NowPlayingBottomBar(
                         Icon(
                             imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                             contentDescription = if (isPlaying) "Pause" else "Play",
-                            tint = Color.Black,
-                            modifier = Modifier.size(30.dp)
+                            tint = Color.White,
+                            modifier = Modifier.size(26.dp)
                         )
                     }
 
-                    // Next Button
                     IconButton(
                         onClick = onNext,
-                        modifier = Modifier.size(42.dp)
+                        modifier = Modifier.size(44.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.SkipNext,

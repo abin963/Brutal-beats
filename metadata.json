@@ -1,6 +1,6 @@
 {
-  "name": "BRUTAL BEATS",
-  "description": "YouTube-powered music discovery and listening app built around a raw Brutalist UI aesthetic.",
+  "name": "NYX Music",
+  "description": "Futuristic, premium music discovery and listening app with immersive visual design and deep sound exploration.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

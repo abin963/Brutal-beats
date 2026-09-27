@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "BRUTAL BEATS"
+rootProject.name = "NYX Music"
 
 include(":app")
