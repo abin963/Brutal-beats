@@ -21,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
@@ -83,18 +84,23 @@ fun SearchScreen(
         item {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                shape = RoundedCornerShape(18.dp),
+                color = Color(0xB3110D24),
                 border = androidx.compose.foundation.BorderStroke(
-                    1.5.dp,
-                    if (searchQuery.isNotEmpty()) NyxPurple else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+                    1.dp,
+                    if (searchQuery.isNotEmpty()) {
+                        Brush.verticalGradient(listOf(NyxPurpleLight, NyxPurple, Color(0x33A855F7)))
+                    } else {
+                        Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.22f), Color.White.copy(alpha = 0.05f)))
+                    }
                 ),
-                tonalElevation = 4.dp
+                tonalElevation = 6.dp,
+                shadowElevation = 8.dp
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 2.dp),
+                        .padding(horizontal = 14.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
