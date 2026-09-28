@@ -315,14 +315,16 @@ fun HeaderSection(
                         }
 
                         // Search Submit Button (min 44dp touch target)
+                        val submitShape = RoundedCornerShape(12.dp)
+                        val submitBgColor = MaterialTheme.colorScheme.surfaceVariant
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(
+                                .clip(submitShape)
+                                .then(
                                     if (isSearching) {
-                                        MaterialTheme.colorScheme.surfaceVariant
+                                        Modifier.background(submitBgColor, submitShape)
                                     } else {
-                                        Brush.linearGradient(listOf(NyxPurple, NyxPurpleLight))
+                                        Modifier.background(Brush.linearGradient(listOf(NyxPurple, NyxPurpleLight)), submitShape)
                                     }
                                 )
                                 .clickable {
@@ -362,16 +364,19 @@ fun HeaderSection(
                         PreferredSourceMode.entries.forEach { mode ->
                             val isSelected = preferredSourceMode == mode
                             val chipShape = RoundedCornerShape(12.dp)
+                            val chipUnselectedColor = if (isDark) Color(0x18FFFFFF) else Color(0x99EDE9FE)
                             Box(
                                 modifier = Modifier
                                     .clip(chipShape)
-                                    .background(
+                                    .then(
                                         if (isSelected) {
-                                            Brush.horizontalGradient(listOf(NyxPurple, NyxPurpleLight))
+                                            Modifier.background(
+                                                Brush.horizontalGradient(listOf(NyxPurple, NyxPurpleLight)),
+                                                chipShape
+                                            )
                                         } else {
-                                            if (isDark) Color(0x18FFFFFF) else Color(0x99EDE9FE)
-                                        },
-                                        chipShape
+                                            Modifier.background(chipUnselectedColor, chipShape)
+                                        }
                                     )
                                     .border(
                                         1.dp,
