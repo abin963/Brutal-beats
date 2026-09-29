@@ -87,6 +87,9 @@ fun BrutalBeatsApp(
                     isPlaying = playerState.isPlaying,
                     volume = if (playerState.isMuted) 0f else playerState.volume,
                     seekToSeconds = playerState.seekTargetSec,
+                    trackTitle = playerState.currentTrack?.title ?: "NYX Music",
+                    trackArtist = playerState.currentTrack?.artist ?: "High Quality Audio",
+                    artworkUrl = playerState.currentTrack?.thumbnailUrl ?: "",
                     onStateChanged = { isPlaying ->
                         if (isPlaying != playerState.isPlaying) {
                             viewModel.setPlayingState(isPlaying)
@@ -104,6 +107,8 @@ fun BrutalBeatsApp(
                     onError = {
                         viewModel.onPlaybackError(it)
                     },
+                    onNext = { viewModel.nextTrack() },
+                    onPrevious = { viewModel.previousTrack() },
                     modifier = Modifier.fillMaxSize()
                 )
             }

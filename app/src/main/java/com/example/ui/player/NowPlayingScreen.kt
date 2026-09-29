@@ -278,11 +278,16 @@ fun NowPlayingScreen(
                             isPlaying = playerState.isPlaying,
                             volume = if (playerState.isMuted) 0f else playerState.volume,
                             seekToSeconds = playerState.seekTargetSec,
+                            trackTitle = track.title,
+                            trackArtist = track.artist,
+                            artworkUrl = track.thumbnailUrl,
                             onStateChanged = onStateChanged,
                             onBufferingChanged = onBufferingChanged,
                             onTimeProgress = onTimeProgress,
                             onTrackEnded = onTrackEnded,
                             onError = onError,
+                            onNext = onNext,
+                            onPrevious = onPrevious,
                             modifier = Modifier.fillMaxSize()
                         )
                     }

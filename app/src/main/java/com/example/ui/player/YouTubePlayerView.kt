@@ -24,7 +24,9 @@ class YouTubeBridge(
     private val onBufferingChanged: (Boolean) -> Unit = {},
     private val onTimeProgress: (Float, Float) -> Unit,
     private val onTrackEnded: () -> Unit,
-    private val onErrorOccurred: (Int) -> Unit
+    private val onErrorOccurred: (Int) -> Unit,
+    private val onNext: () -> Unit = {},
+    private val onPrevious: () -> Unit = {}
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -74,6 +76,20 @@ class YouTubeBridge(
             onErrorOccurred(code)
         }
     }
+
+    @JavascriptInterface
+    fun onNextTrack() {
+        mainHandler.post {
+            onNext()
+        }
+    }
+
+    @JavascriptInterface
+    fun onPrevTrack() {
+        mainHandler.post {
+            onPrevious()
+        }
+    }
 }
 
 @SuppressLint("SetJavaScriptEnabled")
@@ -88,6 +104,11 @@ fun YouTubePlayerView(
     onTimeProgress: (Float, Float) -> Unit,
     onTrackEnded: () -> Unit,
     onError: (Int) -> Unit,
+    onNext: () -> Unit = {},
+    onPrevious: () -> Unit = {},
+    trackTitle: String = "",
+    trackArtist: String = "",
+    artworkUrl: String = "",
     modifier: Modifier = Modifier
 ) {
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
@@ -120,9 +141,21 @@ fun YouTubePlayerView(
     LaunchedEffect(videoId) {
         val wv = webViewRef ?: return@LaunchedEffect
         if (currentLoadedVideoId != null && currentLoadedVideoId != videoId) {
-            wv.evaluateJavascript("playTrack('$videoId');", null)
+            val safeTitle = trackTitle.replace("'", "\\'")
+            val safeArtist = trackArtist.replace("'", "\\'")
+            val safeArt = artworkUrl.replace("'", "\\'")
+            wv.evaluateJavascript("playTrack('$videoId', '$safeTitle', '$safeArtist', '$safeArt');", null)
             currentLoadedVideoId = videoId
         }
+    }
+
+    // Update mediaSession metadata on track details update
+    LaunchedEffect(trackTitle, trackArtist, artworkUrl) {
+        val wv = webViewRef ?: return@LaunchedEffect
+        val safeTitle = trackTitle.replace("'", "\\'")
+        val safeArtist = trackArtist.replace("'", "\\'")
+        val safeArt = artworkUrl.replace("'", "\\'")
+        wv.evaluateJavascript("updateMediaSessionMetadata('$safeTitle', '$safeArtist', '$safeArt');", null)
     }
 
     Box(modifier = modifier.background(BrutalDeepBlack)) {
@@ -132,12 +165,17 @@ fun YouTubePlayerView(
                 createYouTubeWebView(
                     context = context,
                     initialVideoId = videoId,
+                    initialTitle = trackTitle,
+                    initialArtist = trackArtist,
+                    initialArtwork = artworkUrl,
                     bridge = YouTubeBridge(
                         onStateChanged = onStateChanged,
                         onBufferingChanged = onBufferingChanged,
                         onTimeProgress = onTimeProgress,
                         onTrackEnded = onTrackEnded,
-                        onErrorOccurred = onError
+                        onErrorOccurred = onError,
+                        onNext = onNext,
+                        onPrevious = onPrevious
                     )
                 ).also {
                     webViewRef = it
@@ -146,7 +184,10 @@ fun YouTubePlayerView(
             },
             update = { wv ->
                 if (currentLoadedVideoId != videoId) {
-                    wv.evaluateJavascript("playTrack('$videoId');", null)
+                    val safeTitle = trackTitle.replace("'", "\\'")
+                    val safeArtist = trackArtist.replace("'", "\\'")
+                    val safeArt = artworkUrl.replace("'", "\\'")
+                    wv.evaluateJavascript("playTrack('$videoId', '$safeTitle', '$safeArtist', '$safeArt');", null)
                     currentLoadedVideoId = videoId
                 }
             }
@@ -158,6 +199,9 @@ fun YouTubePlayerView(
 private fun createYouTubeWebView(
     context: Context,
     initialVideoId: String,
+    initialTitle: String = "",
+    initialArtist: String = "",
+    initialArtwork: String = "",
     bridge: YouTubeBridge
 ): WebView {
     return WebView(context).apply {
@@ -181,12 +225,17 @@ private fun createYouTubeWebView(
         }
         addJavascriptInterface(bridge, "AndroidBridge")
 
-        val html = buildYouTubeHtml(initialVideoId)
+        val html = buildYouTubeHtml(initialVideoId, initialTitle, initialArtist, initialArtwork)
         loadDataWithBaseURL("https://www.youtube-nocookie.com", html, "text/html", "UTF-8", null)
     }
 }
 
-private fun buildYouTubeHtml(videoId: String): String = """
+private fun buildYouTubeHtml(
+    videoId: String,
+    title: String = "",
+    artist: String = "",
+    artwork: String = ""
+): String = """
 <!DOCTYPE html>
 <html>
 <head>
@@ -224,6 +273,54 @@ private fun buildYouTubeHtml(videoId: String): String = """
     var progressInterval = null;
     var currentVid = '$videoId';
     var pendingVid = null;
+    var currentTitle = '${title.replace("'", "\\'")}';
+    var currentArtist = '${artist.replace("'", "\\'")}';
+    var currentArtwork = '${artwork.replace("'", "\\'")}';
+
+    function initMediaSession() {
+      if ('mediaSession' in navigator) {
+        updateMediaSessionMetadata(currentTitle, currentArtist, currentArtwork);
+        try {
+          navigator.mediaSession.setActionHandler('play', function() { resumeVideo(); });
+          navigator.mediaSession.setActionHandler('pause', function() { pauseVideo(); });
+          navigator.mediaSession.setActionHandler('nexttrack', function() {
+            if (window.AndroidBridge && window.AndroidBridge.onNextTrack) {
+              window.AndroidBridge.onNextTrack();
+            }
+          });
+          navigator.mediaSession.setActionHandler('previoustrack', function() {
+            if (window.AndroidBridge && window.AndroidBridge.onPrevTrack) {
+              window.AndroidBridge.onPrevTrack();
+            }
+          });
+          navigator.mediaSession.setActionHandler('seekto', function(details) {
+            if (details.seekTime !== undefined) {
+              seekTo(details.seekTime);
+            }
+          });
+        } catch (e) {}
+      }
+    }
+
+    function updateMediaSessionMetadata(title, artist, artworkUrl) {
+      currentTitle = title || currentTitle;
+      currentArtist = artist || currentArtist;
+      currentArtwork = artworkUrl || currentArtwork;
+      if ('mediaSession' in navigator && window.MediaMetadata) {
+        try {
+          var artworkList = [];
+          if (currentArtwork) {
+            artworkList.push({ src: currentArtwork, sizes: '512x512', type: 'image/jpeg' });
+          }
+          navigator.mediaSession.metadata = new MediaMetadata({
+            title: currentTitle || 'NYX Music',
+            artist: currentArtist || 'High Quality Audio',
+            album: 'NYX Music Player',
+            artwork: artworkList
+          });
+        } catch (e) {}
+      }
+    }
 
     function onYouTubeIframeAPIReady() {
       var initialVid = pendingVid || currentVid;
@@ -247,6 +344,7 @@ private fun buildYouTubeHtml(videoId: String): String = """
         }
       });
       pendingVid = null;
+      initMediaSession();
     }
 
     function startProgressLoop() {
@@ -261,6 +359,15 @@ private fun buildYouTubeHtml(videoId: String): String = """
               var dur = player.getDuration();
               if (window.AndroidBridge && dur > 0) {
                 window.AndroidBridge.onProgress(cur, dur);
+              }
+              if ('mediaSession' in navigator && typeof navigator.mediaSession.setPositionState === 'function') {
+                try {
+                  navigator.mediaSession.setPositionState({
+                    duration: dur,
+                    playbackRate: 1,
+                    position: cur
+                  });
+                } catch(e) {}
               }
             }
           }
@@ -287,14 +394,26 @@ private fun buildYouTubeHtml(videoId: String): String = """
           event.target.playVideo();
         }
       } catch(e) {}
+      initMediaSession();
     }
 
     function onPlayerStateChange(event) {
       var state = event.data;
       if (state === 1) {
         startProgressLoop();
+        if ('mediaSession' in navigator) {
+          navigator.mediaSession.playbackState = 'playing';
+        }
+      } else if (state === 2) {
+        stopProgressLoop();
+        if ('mediaSession' in navigator) {
+          navigator.mediaSession.playbackState = 'paused';
+        }
       } else {
         stopProgressLoop();
+        if ('mediaSession' in navigator) {
+          navigator.mediaSession.playbackState = 'none';
+        }
       }
       if (window.AndroidBridge) {
         window.AndroidBridge.onStateChange(state);
@@ -308,8 +427,11 @@ private fun buildYouTubeHtml(videoId: String): String = """
       }
     }
 
-    function playTrack(vid) {
+    function playTrack(vid, title, artist, artworkUrl) {
       currentVid = vid;
+      if (title || artist || artworkUrl) {
+        updateMediaSessionMetadata(title, artist, artworkUrl);
+      }
       try {
         if (player && typeof player.loadVideoById === 'function') {
           player.loadVideoById(vid);
@@ -323,6 +445,9 @@ private fun buildYouTubeHtml(videoId: String): String = """
 
     function pauseVideo() {
       stopProgressLoop();
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = 'paused';
+      }
       try {
         if (player && player.pauseVideo) {
           player.pauseVideo();
@@ -331,6 +456,9 @@ private fun buildYouTubeHtml(videoId: String): String = """
     }
 
     function resumeVideo() {
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = 'playing';
+      }
       try {
         if (player && player.playVideo) {
           player.playVideo();
@@ -357,3 +485,4 @@ private fun buildYouTubeHtml(videoId: String): String = """
 </body>
 </html>
 """.trimIndent()
+
