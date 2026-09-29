@@ -30,22 +30,35 @@ class AudioPlaybackManager(private val context: Context) {
         var service = MusicPlayerService.getInstance()
         if (service == null) {
             val intent = Intent(appContext, MusicPlayerService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                ContextCompat.startForegroundService(appContext, intent)
-            } else {
-                appContext.startService(intent)
-            }
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    ContextCompat.startForegroundService(appContext, intent)
+                } else {
+                    appContext.startService(intent)
+                }
+            } catch (_: Exception) {}
             service = MusicPlayerService.getInstance()
         }
         return service
     }
 
-    fun playDirectStream(track: Track, url: String, onCompletion: () -> Unit, onError: ((Int) -> Unit)? = null) {
+    fun playDirectStream(
+        track: Track,
+        url: String,
+        onCompletion: () -> Unit,
+        onError: ((Int) -> Unit)? = null,
+        onTrackChanged: ((Track) -> Unit)? = null
+    ) {
         val service = ensureServiceStarted()
         MusicPlayerService.onCompletionCallback = onCompletion
         MusicPlayerService.onErrorCallback = onError
+        MusicPlayerService.onTrackChangedCallback = onTrackChanged
 
         service?.playDirectStream(track, url)
+    }
+
+    fun preloadNextStream(track: Track, url: String) {
+        MusicPlayerService.getInstance()?.preloadNextStream(track, url)
     }
 
     fun pause() {

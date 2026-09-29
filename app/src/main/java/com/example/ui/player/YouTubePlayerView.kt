@@ -6,6 +6,7 @@ import android.graphics.Color as AndroidColor
 import android.os.Handler
 import android.os.Looper
 import android.webkit.JavascriptInterface
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -170,7 +171,14 @@ private fun createYouTubeWebView(
             allowContentAccess = false
         }
         webChromeClient = WebChromeClient()
-        webViewClient = object : WebViewClient() {}
+        webViewClient = object : WebViewClient() {
+            override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+                try {
+                    view?.destroy()
+                } catch (_: Exception) {}
+                return true // Prevent Android OS from killing the host app process
+            }
+        }
         addJavascriptInterface(bridge, "AndroidBridge")
 
         val html = buildYouTubeHtml(initialVideoId)

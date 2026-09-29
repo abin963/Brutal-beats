@@ -118,6 +118,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val recommendationsCache = mutableMapOf<String, List<Track>>()
     private val recentlyAutoplayedIds = LinkedHashSet<String>()
 
+    private var playJob: Job? = null
     private var radioFetchJob: Job? = null
     private var recommendationJob: Job? = null
     private var searchJob: Job? = null
@@ -140,6 +141,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         com.example.service.MusicPlayerService.onPreviousCallback = { previousTrack() }
         com.example.service.MusicPlayerService.onPlayPauseCallback = { togglePlayPause() }
         com.example.service.MusicPlayerService.onSeekCallback = { seekTo(it) }
+        com.example.service.MusicPlayerService.onTrackChangedCallback = { newTrack -> onSeamlessTrackHandoff(newTrack) }
 
         // Periodically poll MusicPlayerService if running direct audio
         viewModelScope.launch {
@@ -169,12 +171,33 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
                 }
-                delay(300)
+                delay(250)
             }
         }
 
         // Initialize feed
         selectGenre("TRENDING")
+    }
+
+    private fun onSeamlessTrackHandoff(track: Track) {
+        viewModelScope.launch {
+            repository.recordPlayed(track)
+            val isFav = repository.isFavorite(track.videoId)
+            val updated = track.copy(isFavorite = isFav)
+
+            _playerState.update { current ->
+                val q = current.queue
+                val idx = q.indexOfFirst { it.videoId == track.videoId }.takeIf { it >= 0 } ?: current.queueIndex
+                current.copy(
+                    currentTrack = updated,
+                    queueIndex = idx,
+                    currentPositionSec = 0f,
+                    isPlaying = true,
+                    isBuffering = false
+                )
+            }
+            loadRecommendations(updated)
+        }
     }
 
     fun selectTab(tab: MainTab) {
@@ -288,7 +311,12 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 // 2. Pre-resolve stream media metadata
                 if (preloadedMedia?.track?.externalId != nextTrack.videoId) {
-                    preloadedMedia = repository.resolveMedia(nextTrack, _playerState.value.preferredSourceMode)
+                    val resolved = repository.resolveMedia(nextTrack, _playerState.value.preferredSourceMode)
+                    preloadedMedia = resolved
+                    // 3. Preload into Android MediaPlayer for zero-gap transition
+                    if (resolved.playbackType == PlaybackType.DIRECT_AUDIO && !resolved.streamUrl.isNullOrBlank()) {
+                        audioPlaybackManager.preloadNextStream(nextTrack, resolved.streamUrl)
+                    }
                 }
             } catch (_: Exception) {}
         }
@@ -296,64 +324,76 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     fun playTrack(track: Track, newQueue: List<Track>? = null) {
         autoplayJob?.cancel()
+        playJob?.cancel()
         targetSeekSec = -1f
         lastSeekTimestamp = System.currentTimeMillis() + 400
 
-        viewModelScope.launch {
-            repository.recordPlayed(track)
-            val isFav = repository.isFavorite(track.videoId)
-            val updatedTrack = track.copy(isFavorite = isFav)
+        playJob = viewModelScope.launch {
+            try {
+                repository.recordPlayed(track)
+                val isFav = repository.isFavorite(track.videoId)
+                val updatedTrack = track.copy(isFavorite = isFav)
 
-            // Use preloaded media if already resolved for this track
-            val resolved = if (preloadedMedia != null && preloadedMedia?.track?.externalId == track.videoId) {
-                val media = preloadedMedia!!
-                preloadedMedia = null
-                media
-            } else {
-                repository.resolveMedia(updatedTrack, _playerState.value.preferredSourceMode)
+                // Use preloaded media if already resolved for this track
+                val resolved = if (preloadedMedia != null && preloadedMedia?.track?.externalId == track.videoId) {
+                    val media = preloadedMedia!!
+                    preloadedMedia = null
+                    media
+                } else {
+                    repository.resolveMedia(updatedTrack, _playerState.value.preferredSourceMode)
+                }
+
+                val initialDuration = parseDurationSeconds(updatedTrack.duration)
+
+                _playerState.update { current ->
+                    val q = newQueue ?: if (current.queue.any { it.videoId == track.videoId }) current.queue else listOf(track) + current.queue
+                    val idx = q.indexOfFirst { it.videoId == track.videoId }.coerceAtLeast(0)
+                    current.copy(
+                        currentTrack = updatedTrack,
+                        resolvedMedia = resolved,
+                        playbackType = resolved.playbackType,
+                        isPlaying = true,
+                        isBuffering = true,
+                        queue = q,
+                        queueIndex = idx,
+                        currentPositionSec = 0f,
+                        totalDurationSec = if (initialDuration > 0f) initialDuration else 0f,
+                        seekTargetSec = 0f
+                    )
+                }
+
+                // Fetch contextual recommendations asynchronously
+                loadRecommendations(updatedTrack)
+
+                // Direct audio playback vs YouTube IFrame playback
+                if (resolved.playbackType == PlaybackType.DIRECT_AUDIO && !resolved.streamUrl.isNullOrBlank()) {
+                    audioPlaybackManager.playDirectStream(
+                        track = updatedTrack,
+                        url = resolved.streamUrl,
+                        onCompletion = { onTrackFinished() },
+                        onError = { onPlaybackError(it) },
+                        onTrackChanged = { onSeamlessTrackHandoff(it) }
+                    )
+                } else {
+                    audioPlaybackManager.syncForegroundStreamState(
+                        track = updatedTrack,
+                        isPlaying = true,
+                        isBuffering = true,
+                        currentSec = 0f,
+                        durationSec = initialDuration
+                    )
+                }
+
+                showMessage("NOW PLAYING: [${resolved.sourceName.uppercase()}] ${updatedTrack.title.take(24)}")
+
+                // Proactively preload next track in queue if available
+                val nextIdx = _playerState.value.queueIndex + 1
+                if (nextIdx in _playerState.value.queue.indices) {
+                    preloadNextTrack(_playerState.value.queue[nextIdx])
+                }
+            } catch (e: Exception) {
+                onPlaybackError(-1)
             }
-
-            val initialDuration = parseDurationSeconds(updatedTrack.duration)
-
-            _playerState.update { current ->
-                val q = newQueue ?: if (current.queue.any { it.videoId == track.videoId }) current.queue else listOf(track) + current.queue
-                val idx = q.indexOfFirst { it.videoId == track.videoId }.coerceAtLeast(0)
-                current.copy(
-                    currentTrack = updatedTrack,
-                    resolvedMedia = resolved,
-                    playbackType = resolved.playbackType,
-                    isPlaying = true,
-                    isBuffering = true,
-                    queue = q,
-                    queueIndex = idx,
-                    currentPositionSec = 0f,
-                    totalDurationSec = if (initialDuration > 0f) initialDuration else 0f,
-                    seekTargetSec = 0f
-                )
-            }
-
-            // Fetch contextual recommendations asynchronously
-            loadRecommendations(updatedTrack)
-
-            // Direct audio playback vs YouTube IFrame playback
-            if (resolved.playbackType == PlaybackType.DIRECT_AUDIO && !resolved.streamUrl.isNullOrBlank()) {
-                audioPlaybackManager.playDirectStream(
-                    track = updatedTrack,
-                    url = resolved.streamUrl,
-                    onCompletion = { onTrackFinished() },
-                    onError = { onPlaybackError(it) }
-                )
-            } else {
-                audioPlaybackManager.syncForegroundStreamState(
-                    track = updatedTrack,
-                    isPlaying = true,
-                    isBuffering = true,
-                    currentSec = 0f,
-                    durationSec = initialDuration
-                )
-            }
-
-            showMessage("NOW PLAYING: [${resolved.sourceName.uppercase()}] ${updatedTrack.title.take(24)}")
         }
     }
 
@@ -539,7 +579,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                         track = track,
                         url = url,
                         onCompletion = { onTrackFinished() },
-                        onError = { onPlaybackError(it) }
+                        onError = { onPlaybackError(it) },
+                        onTrackChanged = { onSeamlessTrackHandoff(it) }
                     )
                 }
             }
@@ -660,6 +701,37 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onPlaybackError(errorCode: Int) {
         val current = _playerState.value
+        val track = current.currentTrack
+
+        // If Direct Audio stream failed for this track, seamlessly fall back to YouTube embed
+        if (current.playbackType == PlaybackType.DIRECT_AUDIO && track != null && consecutiveFailures == 0) {
+            consecutiveFailures++
+            viewModelScope.launch {
+                try {
+                    val ytFallback = repository.resolveMedia(track, PreferredSourceMode.YOUTUBE)
+                    _playerState.update {
+                        it.copy(
+                            resolvedMedia = ytFallback,
+                            playbackType = PlaybackType.YOUTUBE_EMBED,
+                            isPlaying = true,
+                            isBuffering = false
+                        )
+                    }
+                    audioPlaybackManager.syncForegroundStreamState(
+                        track = track,
+                        isPlaying = true,
+                        isBuffering = false,
+                        currentSec = _playerState.value.currentPositionSec,
+                        durationSec = _playerState.value.totalDurationSec
+                    )
+                    showMessage("STREAM SWITCHED TO YOUTUBE")
+                    return@launch
+                } catch (_: Exception) {}
+                advanceToNextTrackOrAutoplay()
+            }
+            return
+        }
+
         consecutiveFailures++
         if (current.isAutoplayEnabled && consecutiveFailures <= 3) {
             showMessage("TRACK UNAVAILABLE, AUTOPLAYING NEXT...")

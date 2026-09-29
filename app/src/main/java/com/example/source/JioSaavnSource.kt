@@ -168,11 +168,11 @@ class JioSaavnSource : MusicSource {
             val decodedBytes = Base64.decode(encryptedUrl, Base64.DEFAULT)
             val decryptedBytes = cipher.doFinal(decodedBytes)
             val decrypted = String(decryptedBytes, Charsets.UTF_8).trim()
-            // Ensure valid audio url (can replace _96.mp4 with _320.mp4 if present)
-            if (decrypted.endsWith(".mp4") || decrypted.endsWith(".m4a") || decrypted.startsWith("http")) {
-                decrypted.replace("_96.mp4", "_320.mp4")
+            val secureUrl = decrypted.replace("http://", "https://")
+            if (secureUrl.startsWith("http")) {
+                secureUrl
             } else {
-                decrypted
+                null
             }
         } catch (_: Exception) {
             null

@@ -43,7 +43,8 @@ import kotlinx.coroutines.launch
 
 /**
  * Foreground Service that handles authoritative background audio playback,
- * MediaSession, lock screen/notification media controls, audio focus, and headphone disconnect.
+ * gapless track transitions, MediaSession, lock screen/notification media controls,
+ * audio focus, and headphone disconnect.
  */
 class MusicPlayerService : Service(), AudioManager.OnAudioFocusChangeListener {
 
@@ -58,7 +59,9 @@ class MusicPlayerService : Service(), AudioManager.OnAudioFocusChangeListener {
         const val ACTION_NEXT = "com.example.service.ACTION_NEXT"
         const val ACTION_PREV = "com.example.service.ACTION_PREV"
         const val ACTION_SEEK_TO = "com.example.service.ACTION_SEEK_TO"
+        const val ACTION_PLAY_DIRECT = "com.example.service.ACTION_PLAY_DIRECT"
         const val EXTRA_SEEK_MS = "extra_seek_ms"
+        const val EXTRA_STREAM_URL = "extra_stream_url"
 
         // Global singleton accessor for single-source-of-truth player state & controls
         @Volatile
@@ -71,6 +74,7 @@ class MusicPlayerService : Service(), AudioManager.OnAudioFocusChangeListener {
         var onSeekCallback: ((Float) -> Unit)? = null
         var onCompletionCallback: (() -> Unit)? = null
         var onErrorCallback: ((Int) -> Unit)? = null
+        var onTrackChangedCallback: ((Track) -> Unit)? = null
     }
 
     private val binder = LocalBinder()
@@ -78,6 +82,11 @@ class MusicPlayerService : Service(), AudioManager.OnAudioFocusChangeListener {
     private val mainHandler = Handler(Looper.getMainLooper())
 
     private var mediaPlayer: MediaPlayer? = null
+    private var isPlayerPrepared = false
+    private var nextMediaPlayer: MediaPlayer? = null
+    private var nextTrack: Track? = null
+    private var isGaplessAttached = false
+
     private var mediaSession: MediaSessionCompat? = null
     private var audioManager: AudioManager? = null
     private var audioFocusRequest: AudioFocusRequest? = null
@@ -112,12 +121,12 @@ class MusicPlayerService : Service(), AudioManager.OnAudioFocusChangeListener {
                         val durSec = mp.duration / 1000f
                         _currentPositionSec.value = posSec
                         if (durSec > 0) _durationSec.value = durSec
-                        updatePlaybackState(PlaybackStateCompat.STATE_PLAYING, mp.currentPosition.toLong())
+                        updatePlaybackState(PlaybackStateCompat.STATE_PLAYING, mp.currentPosition.toLong(), 1.0f)
                     }
                 } catch (_: Exception) {}
             }
             if (isUpdatingProgress) {
-                mainHandler.postDelayed(this, 500)
+                mainHandler.postDelayed(this, 300)
             }
         }
     }
@@ -144,10 +153,22 @@ class MusicPlayerService : Service(), AudioManager.OnAudioFocusChangeListener {
         audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
         createNotificationChannel()
         initMediaSession()
+
+        // Immediate initial notification to satisfy Android Foreground Service contract
+        try {
+            val initialNotif = buildNotification(currentTrack, isPlaying = false, isBuffering = false)
+            startForeground(NOTIFICATION_ID, initialNotif)
+        } catch (_: Exception) {}
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         MediaButtonReceiver.handleIntent(mediaSession, intent)
+
+        // Ensure foreground status is active immediately to prevent OS timeout exceptions
+        try {
+            val notif = buildNotification(currentTrack, _isPlaying.value, _isBuffering.value)
+            startForeground(NOTIFICATION_ID, notif)
+        } catch (_: Exception) {}
 
         when (intent?.action) {
             ACTION_PLAY -> resume()
@@ -206,17 +227,21 @@ class MusicPlayerService : Service(), AudioManager.OnAudioFocusChangeListener {
     fun playDirectStream(track: Track, url: String) {
         currentTrack = track
         userInitiatedPause = false
+        isPlayerPrepared = false
         _isBuffering.value = true
         _durationSec.value = 0f
         _currentPositionSec.value = 0f
 
+        clearNextPlayer()
         stopCurrentPlayer()
         requestAudioFocus()
         registerNoisyReceiver()
 
         updateMediaMetadata(track, null)
-        updatePlaybackState(PlaybackStateCompat.STATE_BUFFERING, 0L)
-        startForeground(NOTIFICATION_ID, buildNotification(track, isPlaying = true, isBuffering = true))
+        updatePlaybackState(PlaybackStateCompat.STATE_BUFFERING, 0L, 0.0f)
+        try {
+            startForeground(NOTIFICATION_ID, buildNotification(track, isPlaying = true, isBuffering = true))
+        } catch (_: Exception) {}
         loadArtworkBitmap(track)
 
         try {
@@ -229,39 +254,149 @@ class MusicPlayerService : Service(), AudioManager.OnAudioFocusChangeListener {
                 )
                 setDataSource(url)
                 setOnPreparedListener { player ->
-                    player.start()
-                    _isPlaying.value = true
-                    _isBuffering.value = false
-                    _durationSec.value = player.duration / 1000f
-                    startProgressLoop()
-                    updatePlaybackState(PlaybackStateCompat.STATE_PLAYING, player.currentPosition.toLong())
-                    updateNotification()
+                    try {
+                        isPlayerPrepared = true
+                        player.start()
+                        _isPlaying.value = true
+                        _isBuffering.value = false
+                        _durationSec.value = player.duration / 1000f
+                        startProgressLoop()
+                        updatePlaybackState(PlaybackStateCompat.STATE_PLAYING, player.currentPosition.toLong(), 1.0f)
+                        updateNotification()
+
+                        // Check if we already have next player prepared to attach gaplessly
+                        attachGaplessNextPlayerIfReady()
+                    } catch (e: Exception) {
+                        isPlayerPrepared = false
+                        onErrorCallback?.invoke(-1)
+                    }
                 }
                 setOnCompletionListener {
-                    _isPlaying.value = false
-                    _isBuffering.value = false
-                    stopProgressLoop()
-                    updatePlaybackState(PlaybackStateCompat.STATE_PAUSED, 0L)
-                    updateNotification()
-                    onCompletionCallback?.invoke()
+                    handleTrackCompletion()
                 }
                 setOnErrorListener { _, what, _ ->
+                    isPlayerPrepared = false
                     _isPlaying.value = false
                     _isBuffering.value = false
                     stopProgressLoop()
-                    updatePlaybackState(PlaybackStateCompat.STATE_ERROR, 0L)
+                    updatePlaybackState(PlaybackStateCompat.STATE_ERROR, 0L, 0.0f)
                     updateNotification()
                     onErrorCallback?.invoke(what)
-                    false
+                    true // Return true to signal error was handled and prevent erroneous completion callback cascade!
                 }
                 prepareAsync()
             }
             mediaPlayer = mp
         } catch (_: Exception) {
+            isPlayerPrepared = false
             _isPlaying.value = false
             _isBuffering.value = false
             onErrorCallback?.invoke(-1)
         }
+    }
+
+    /**
+     * Preload next track for seamless zero-gap transitions via Android MediaPlayer.setNextMediaPlayer
+     */
+    fun preloadNextStream(track: Track, url: String) {
+        if (url.isBlank()) return
+        clearNextPlayer()
+        nextTrack = track
+        serviceScope.launch(Dispatchers.IO) {
+            try {
+                val nextMp = MediaPlayer().apply {
+                    setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .build()
+                    )
+                    setDataSource(url)
+                    setOnPreparedListener {
+                        isGaplessAttached = false
+                        mainHandler.post {
+                            attachGaplessNextPlayerIfReady()
+                        }
+                    }
+                    setOnCompletionListener {
+                        handleTrackCompletion()
+                    }
+                    setOnErrorListener { _, _, _ ->
+                        clearNextPlayer()
+                        true
+                    }
+                    prepareAsync()
+                }
+                nextMediaPlayer = nextMp
+            } catch (_: Exception) {
+                clearNextPlayer()
+            }
+        }
+    }
+
+    private fun attachGaplessNextPlayerIfReady() {
+        val current = mediaPlayer ?: return
+        val next = nextMediaPlayer ?: return
+        if (!isGaplessAttached && _isPlaying.value) {
+            try {
+                current.setNextMediaPlayer(next)
+                isGaplessAttached = true
+            } catch (_: Exception) {}
+        }
+    }
+
+    private fun handleTrackCompletion() {
+        val upcoming = nextTrack
+        val nextMp = nextMediaPlayer
+
+        if (upcoming != null && nextMp != null && isGaplessAttached) {
+            // Seamless gapless handoff
+            try {
+                mediaPlayer?.release()
+            } catch (_: Exception) {}
+
+            mediaPlayer = nextMp
+            isPlayerPrepared = true
+            currentTrack = upcoming
+            nextMediaPlayer = null
+            nextTrack = null
+            isGaplessAttached = false
+
+            _isPlaying.value = true
+            _isBuffering.value = false
+            _currentPositionSec.value = 0f
+            _durationSec.value = (nextMp.duration / 1000f).coerceAtLeast(0f)
+
+            updateMediaMetadata(upcoming, null)
+            updatePlaybackState(PlaybackStateCompat.STATE_PLAYING, 0L, 1.0f)
+            updateNotification()
+            loadArtworkBitmap(upcoming)
+            startProgressLoop()
+
+            onTrackChangedCallback?.invoke(upcoming)
+            onCompletionCallback?.invoke()
+        } else {
+            isPlayerPrepared = false
+            _isPlaying.value = false
+            _isBuffering.value = false
+            stopProgressLoop()
+            updatePlaybackState(PlaybackStateCompat.STATE_PAUSED, 0L, 0.0f)
+            updateNotification()
+            onCompletionCallback?.invoke()
+        }
+    }
+
+    private fun clearNextPlayer() {
+        try {
+            mediaPlayer?.setNextMediaPlayer(null)
+        } catch (_: Exception) {}
+        try {
+            nextMediaPlayer?.reset()
+            nextMediaPlayer?.release()
+        } catch (_: Exception) {}
+        nextMediaPlayer = null
+        nextTrack = null
+        isGaplessAttached = false
     }
 
     fun syncForegroundStreamState(track: Track, isPlaying: Boolean, isBuffering: Boolean, currentSec: Float, durationSec: Float) {
@@ -276,7 +411,8 @@ class MusicPlayerService : Service(), AudioManager.OnAudioFocusChangeListener {
             isPlaying -> PlaybackStateCompat.STATE_PLAYING
             else -> PlaybackStateCompat.STATE_PAUSED
         }
-        updatePlaybackState(state, (currentSec * 1000).toLong())
+        val speed = if (isPlaying && !isBuffering) 1.0f else 0.0f
+        updatePlaybackState(state, (currentSec * 1000).toLong(), speed)
         updateMediaMetadata(track, currentArtworkBitmap)
         updateNotification()
         if (currentArtworkBitmap == null) {
@@ -286,14 +422,18 @@ class MusicPlayerService : Service(), AudioManager.OnAudioFocusChangeListener {
 
     fun pause() {
         userInitiatedPause = true
-        mediaPlayer?.let {
-            if (it.isPlaying) {
-                it.pause()
+        if (isPlayerPrepared) {
+            mediaPlayer?.let {
+                try {
+                    if (it.isPlaying) {
+                        it.pause()
+                    }
+                } catch (_: Exception) {}
             }
         }
         _isPlaying.value = false
         stopProgressLoop()
-        updatePlaybackState(PlaybackStateCompat.STATE_PAUSED, (_currentPositionSec.value * 1000).toLong())
+        updatePlaybackState(PlaybackStateCompat.STATE_PAUSED, (_currentPositionSec.value * 1000).toLong(), 0.0f)
         updateNotification()
     }
 
@@ -301,39 +441,57 @@ class MusicPlayerService : Service(), AudioManager.OnAudioFocusChangeListener {
         userInitiatedPause = false
         requestAudioFocus()
         registerNoisyReceiver()
-        mediaPlayer?.let {
-            it.start()
-            startProgressLoop()
+        if (isPlayerPrepared) {
+            mediaPlayer?.let {
+                try {
+                    if (!it.isPlaying) {
+                        it.start()
+                        startProgressLoop()
+                    }
+                } catch (_: Exception) {}
+            }
         }
         _isPlaying.value = true
-        updatePlaybackState(PlaybackStateCompat.STATE_PLAYING, (_currentPositionSec.value * 1000).toLong())
+        updatePlaybackState(PlaybackStateCompat.STATE_PLAYING, (_currentPositionSec.value * 1000).toLong(), 1.0f)
         updateNotification()
     }
 
     fun seekTo(seconds: Float) {
-        mediaPlayer?.let {
-            val ms = (seconds * 1000).toInt().coerceIn(0, it.duration)
-            it.seekTo(ms)
+        if (isPlayerPrepared) {
+            mediaPlayer?.let {
+                try {
+                    val ms = (seconds * 1000).toInt().coerceIn(0, it.duration)
+                    it.seekTo(ms)
+                } catch (_: Exception) {}
+            }
         }
         _currentPositionSec.value = seconds
         val state = if (_isPlaying.value) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
-        updatePlaybackState(state, (seconds * 1000).toLong())
+        val speed = if (_isPlaying.value) 1.0f else 0.0f
+        updatePlaybackState(state, (seconds * 1000).toLong(), speed)
     }
 
     fun setVolume(vol0to100: Float) {
         val scalar = (vol0to100 / 100f).coerceIn(0f, 1f)
-        mediaPlayer?.setVolume(scalar, scalar)
+        try {
+            mediaPlayer?.setVolume(scalar, scalar)
+            nextMediaPlayer?.setVolume(scalar, scalar)
+        } catch (_: Exception) {}
     }
 
     fun stopPlayback() {
+        isPlayerPrepared = false
         stopProgressLoop()
+        clearNextPlayer()
         stopCurrentPlayer()
         abandonAudioFocus()
         unregisterNoisyReceiver()
         _isPlaying.value = false
         _currentPositionSec.value = 0f
-        updatePlaybackState(PlaybackStateCompat.STATE_STOPPED, 0L)
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        updatePlaybackState(PlaybackStateCompat.STATE_STOPPED, 0L, 0.0f)
+        try {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } catch (_: Exception) {}
         stopSelf()
     }
 
@@ -349,6 +507,7 @@ class MusicPlayerService : Service(), AudioManager.OnAudioFocusChangeListener {
     }
 
     private fun stopCurrentPlayer() {
+        isPlayerPrepared = false
         mediaPlayer?.let {
             try {
                 if (it.isPlaying) it.stop()
@@ -396,7 +555,7 @@ class MusicPlayerService : Service(), AudioManager.OnAudioFocusChangeListener {
         mediaSession?.setMetadata(metaBuilder.build())
     }
 
-    private fun updatePlaybackState(state: Int, positionMs: Long) {
+    private fun updatePlaybackState(state: Int, positionMs: Long, speed: Float) {
         val actions = PlaybackStateCompat.ACTION_PLAY or
                 PlaybackStateCompat.ACTION_PAUSE or
                 PlaybackStateCompat.ACTION_PLAY_PAUSE or
@@ -407,7 +566,7 @@ class MusicPlayerService : Service(), AudioManager.OnAudioFocusChangeListener {
 
         val playbackState = PlaybackStateCompat.Builder()
             .setActions(actions)
-            .setState(state, positionMs, 1.0f)
+            .setState(state, positionMs, speed)
             .build()
         mediaSession?.setPlaybackState(playbackState)
     }
@@ -468,7 +627,9 @@ class MusicPlayerService : Service(), AudioManager.OnAudioFocusChangeListener {
     private fun updateNotification() {
         val track = currentTrack ?: return
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
-        manager?.notify(NOTIFICATION_ID, buildNotification(track, _isPlaying.value, _isBuffering.value))
+        try {
+            manager?.notify(NOTIFICATION_ID, buildNotification(track, _isPlaying.value, _isBuffering.value))
+        } catch (_: Exception) {}
     }
 
     private fun requestAudioFocus() {
@@ -535,8 +696,10 @@ class MusicPlayerService : Service(), AudioManager.OnAudioFocusChangeListener {
     private fun registerNoisyReceiver() {
         if (!isNoisyReceiverRegistered) {
             val filter = IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY)
-            registerReceiver(becomingNoisyReceiver, filter)
-            isNoisyReceiverRegistered = true
+            try {
+                registerReceiver(becomingNoisyReceiver, filter)
+                isNoisyReceiverRegistered = true
+            } catch (_: Exception) {}
         }
     }
 
@@ -567,6 +730,7 @@ class MusicPlayerService : Service(), AudioManager.OnAudioFocusChangeListener {
     override fun onDestroy() {
         super.onDestroy()
         stopProgressLoop()
+        clearNextPlayer()
         stopCurrentPlayer()
         abandonAudioFocus()
         unregisterNoisyReceiver()
