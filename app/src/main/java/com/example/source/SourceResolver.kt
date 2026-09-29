@@ -4,7 +4,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 enum class PreferredSourceMode {
-    AUTO,        // Tries direct audio stream (320k) first for real background playback, falls back to YouTube embed
+    AUTO,        // Standard direct YouTube embed, JioSaavn for explicit 320k tracks
     YOUTUBE,     // Always uses YouTube IFrame stream
     JIOSAAVN     // Prefers JioSaavn 320kbps direct stream
 }
@@ -56,8 +56,8 @@ object SourceResolver {
             }
 
             PreferredSourceMode.AUTO -> {
-                // 1. If track already has direct stream url (e.g. JioSaavn or cached audio stream)
-                if (!track.directStreamUrl.isNullOrBlank()) {
+                // 1. If track already has direct stream url (e.g. JioSaavn source)
+                if (!track.directStreamUrl.isNullOrBlank() && track.sourceId == "JIOSAAVN") {
                     return@withContext ResolvedMedia(
                         track = track,
                         playbackType = PlaybackType.DIRECT_AUDIO,
@@ -68,14 +68,8 @@ object SourceResolver {
                     )
                 }
 
-                // 2. Try resolving direct high-quality 320k audio stream for real background playback & gapless transitions
-                val saavnMedia = saavnSource.resolveStream(track)
-                if (saavnMedia != null && !saavnMedia.streamUrl.isNullOrBlank()) {
-                    return@withContext saavnMedia
-                }
-
-                // 3. If track originated from YouTube, use YouTube Stream
-                if (track.sourceId == "YOUTUBE") {
+                // 2. Direct YouTube playback
+                if (track.sourceId == "YOUTUBE" || track.externalId.isNotBlank()) {
                     return@withContext ResolvedMedia(
                         track = track,
                         playbackType = PlaybackType.YOUTUBE_EMBED,
@@ -86,7 +80,13 @@ object SourceResolver {
                     )
                 }
 
-                // 4. Fallback to YouTube source
+                // 3. Try resolving via JioSaavn
+                val saavnMedia = saavnSource.resolveStream(track)
+                if (saavnMedia != null && !saavnMedia.streamUrl.isNullOrBlank()) {
+                    return@withContext saavnMedia
+                }
+
+                // 4. Fallback to YouTube
                 ytSource.resolveStream(track) ?: fallbackMedia(track)
             }
         }

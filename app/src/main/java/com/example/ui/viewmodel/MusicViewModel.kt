@@ -399,7 +399,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     fun togglePlayPause() {
         val current = _playerState.value
-        if (current.currentTrack == null) return
+        val track = current.currentTrack ?: return
 
         if (current.playbackType == PlaybackType.DIRECT_AUDIO) {
             if (current.isPlaying) {
@@ -408,7 +408,15 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 audioPlaybackManager.resume()
             }
         } else {
-            _playerState.update { it.copy(isPlaying = !it.isPlaying) }
+            val newPlaying = !current.isPlaying
+            _playerState.update { it.copy(isPlaying = newPlaying) }
+            audioPlaybackManager.syncForegroundStreamState(
+                track = track,
+                isPlaying = newPlaying,
+                isBuffering = false,
+                currentSec = current.currentPositionSec,
+                durationSec = current.totalDurationSec
+            )
         }
     }
 
