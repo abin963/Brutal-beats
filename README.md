@@ -1,57 +1,158 @@
+<div align="center">
+
 # 🎵 NYX Music
 
-> A futuristic Android music player focused on immersive visuals, smooth playback, and modern music discovery.
+### A Futuristic Android Music Player
 
-**NYX Music** is an Android music player built with **Kotlin and Jetpack Compose**. The project combines a modern UI with network-based music services, local data storage, background playback, and AI-powered capabilities.
+<p align="center">
+  <img src="https://img.shields.io/badge/Platform-Android-3DDC84?style=for-the-badge&logo=android&logoColor=white" />
+  <img src="https://img.shields.io/badge/Kotlin-2.x-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" />
+  <img src="https://img.shields.io/badge/Jetpack%20Compose-UI-4285F4?style=for-the-badge&logo=jetpackcompose&logoColor=white" />
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/github/stars/abin963/Brutal-beats?style=for-the-badge&logo=github&label=STARS" />
+  <img src="https://img.shields.io/github/forks/abin963/Brutal-beats?style=for-the-badge&logo=github&label=FORKS" />
+  <img src="https://img.shields.io/github/license/abin963/Brutal-beats?style=for-the-badge&label=LICENSE" />
+</p>
+
+---
+
+**Discover · Listen · Experience**
+
+</div>
+
+---
+
+## 🎧 About NYX
+
+**NYX Music** is a modern Android music player designed around a futuristic and immersive listening experience.
+
+Built with **Kotlin** and **Jetpack Compose**, NYX combines music playback, discovery, modern animations, immersive artwork and background playback into a single music experience.
+
+The goal is simple:
+
+> **Make listening to music feel as good as looking at it.**
+
+---
 
 ## ✨ Features
 
-- 🎵 Modern music player interface
-- ▶️ Play, pause, seek, previous and next controls
-- 🔊 Background music playback
-- 📱 Android media controls
-- 🔔 Playback notifications
-- 🎧 Dedicated full-screen player
-- 🔎 Music discovery and search
-- 🖼️ Album artwork loading
-- 🌐 Network-based music services
-- 🤖 AI-powered capabilities
-- 💾 Local music/player data
-- ⚡ Kotlin Coroutines for asynchronous operations
-- 🎨 Jetpack Compose UI
-- 📱 Android media-session integration
+### 🎵 Music Player
+
+- ▶️ Play / Pause
+- ⏭️ Next / Previous
+- 🔀 Shuffle
+- 🔁 Repeat
+- ⏩ Seek through songs
+- 🎚️ Playback progress
+- 🖼️ Album artwork
+- 🎧 Full-screen player
+
+### 🔊 Background Playback
+
+NYX is designed to continue playing music while the application is running in the background.
+
+Supports:
+
+- Background playback
+- Media notifications
+- Lock-screen controls
+- Android media controls
+- Foreground media service
+
+### 🔎 Music Discovery
+
+- Search for music
+- Discover songs
+- View album artwork
+- Explore artists
+- Music recommendations
+
+### 🎨 Modern UI
+
+NYX focuses heavily on visual design.
+
+- Glassmorphism
+- Liquid-glass inspired interface
+- Smooth animations
+- Dark mode
+- Light mode
+- Modern typography
+- Immersive album artwork
+- Responsive layouts
+
+---
+
+## 🖼️ Screenshots
+
+<div align="center">
+
+### Home
+
+<img src="screenshots/home.png" width="300"/>
+
+### Player
+
+<img src="screenshots/player.png" width="300"/>
+
+### Search
+
+<img src="screenshots/search.png" width="300"/>
+
+</div>
+
+> Replace the images above with your actual screenshots.
+
+---
 
 ## 🛠️ Tech Stack
 
-| Technology | Usage |
+| Technology | Purpose |
 |---|---|
-| **Kotlin** | Main programming language |
-| **Jetpack Compose** | UI development |
-| **Material 3** | UI components |
-| **AndroidX** | Android application framework |
-| **Media** | Music playback and media controls |
-| **Room** | Local database |
-| **Retrofit** | Network API communication |
-| **OkHttp** | HTTP networking |
-| **Moshi** | JSON serialization |
-| **Coil** | Album-art/image loading |
-| **Kotlin Coroutines** | Async operations |
-| **Firebase AI** | AI functionality |
-| **KSP** | Kotlin code generation |
-| **Gradle Kotlin DSL** | Build system |
+| 🟣 Kotlin | Programming language |
+| 🎨 Jetpack Compose | UI framework |
+| 🎨 Material 3 | UI components |
+| 💾 Room | Local database |
+| 🌐 Retrofit | API communication |
+| 🔌 OkHttp | Networking |
+| 🖼️ Coil | Image loading |
+| ⚡ Coroutines | Asynchronous operations |
+| 🤖 Firebase AI | AI functionality |
+| 📱 AndroidX Media | Media playback |
+| 🔧 KSP | Code generation |
+| 📦 Gradle Kotlin DSL | Build system |
 
-## 📱 Android Requirements
+---
 
-- **Minimum Android:** API 24
-- **Target Android:** API 36
-- **Compile SDK:** API 36
-- **Java:** 11+
-- **Android Studio:** Latest stable version recommended
+## 🏗️ Architecture
 
-## 🚀 Getting Started
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/abin963/Brutal-beats.git
-cd Brutal-beats
+```text
+NYX Music
+│
+├── 🎨 UI
+│   ├── Home
+│   ├── Search
+│   ├── Player
+│   ├── Library
+│   └── Settings
+│
+├── 🎵 Playback
+│   ├── Music Player
+│   ├── Media Session
+│   ├── Playback Service
+│   └── Notifications
+│
+├── 🌐 Network
+│   ├── API
+│   ├── Retrofit
+│   └── OkHttp
+│
+├── 💾 Database
+│   ├── Room
+│   ├── Songs
+│   ├── Playlists
+│   └── History
+│
+└── 🤖 AI
+    └── Firebase AI
