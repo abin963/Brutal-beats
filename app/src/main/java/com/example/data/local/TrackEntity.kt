@@ -18,7 +18,9 @@ data class TrackEntity(
     val playCount: Int = 0,
     val addedToFavoritesTimestamp: Long = 0L,
     val sourceId: String = "YOUTUBE",
-    val directStreamUrl: String? = null
+    val directStreamUrl: String? = null,
+    val isDownloaded: Boolean = false,
+    val downloadPath: String? = null
 ) {
     fun toTrack(): Track = Track(
         videoId = videoId,
@@ -30,7 +32,9 @@ data class TrackEntity(
         isFavorite = isFavorite,
         sourceId = sourceId,
         ytSourceLabel = sourceId,
-        directStreamUrl = directStreamUrl
+        directStreamUrl = directStreamUrl,
+        isDownloaded = isDownloaded,
+        downloadPath = downloadPath
     )
 
     companion object {
@@ -43,7 +47,9 @@ data class TrackEntity(
             genre = track.genre,
             isFavorite = isFav,
             sourceId = track.sourceId,
-            directStreamUrl = track.directStreamUrl
+            directStreamUrl = track.directStreamUrl,
+            isDownloaded = track.isDownloaded,
+            downloadPath = track.downloadPath
         )
     }
 }

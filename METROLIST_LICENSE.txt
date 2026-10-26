@@ -1,0 +1,16 @@
+This application incorporates architecture and features adapted from Metrolist
+(https://github.com/vfsfitvnm/ViMusic / Metrolist), an open-source Android music player
+licensed under the GNU General Public License v3.0 (GPL-3.0).
+
+Adapted components include:
+- AndroidX Media3 ExoPlayer & MediaSessionService architecture
+- InnerTube YouTube Music parser and stream extractor
+- Synchronized lyrics parser (LRCLIB format)
+- Offline audio download cache patterns
+
+GNU GENERAL PUBLIC LICENSE
+Version 3, 29 June 2007
+
+Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>
+Everyone is permitted to copy and distribute verbatim copies
+of this license document, but changing it is not allowed.

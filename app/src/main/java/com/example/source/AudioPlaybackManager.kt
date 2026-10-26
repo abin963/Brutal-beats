@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Controller bridging MusicViewModel and MusicPlayerService, ensuring ONE authoritative playback instance.
+ * Controller bridging MusicViewModel and Media3 MusicPlayerService, ensuring ONE authoritative playback instance.
  */
 class AudioPlaybackManager(private val context: Context) {
 
@@ -57,10 +57,6 @@ class AudioPlaybackManager(private val context: Context) {
         service?.playDirectStream(track, url)
     }
 
-    fun preloadNextStream(track: Track, url: String) {
-        MusicPlayerService.getInstance()?.preloadNextStream(track, url)
-    }
-
     fun pause() {
         MusicPlayerService.getInstance()?.pause()
     }
@@ -75,6 +71,14 @@ class AudioPlaybackManager(private val context: Context) {
 
     fun setVolume(volume0to100: Float) {
         MusicPlayerService.getInstance()?.setVolume(volume0to100)
+    }
+
+    fun toggleRepeatMode(): Int {
+        return MusicPlayerService.getInstance()?.toggleRepeatMode() ?: 0
+    }
+
+    fun toggleShuffle(): Boolean {
+        return MusicPlayerService.getInstance()?.toggleShuffle() ?: false
     }
 
     fun stop() {

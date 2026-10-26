@@ -42,16 +42,25 @@ data class PlayerUiState(
     val isMuted: Boolean = false,
     val isLooping: Boolean = false,
     val isShuffling: Boolean = false,
+    val repeatMode: Int = 0, // 0 = OFF, 1 = ONE, 2 = ALL
     val isAutoplayEnabled: Boolean = true,
     val seekTargetSec: Float? = null,
     val queue: List<Track> = emptyList(),
     val queueIndex: Int = 0,
     val isPlayerExpanded: Boolean = false,
     val isQueueVisible: Boolean = false,
+    val isLyricsVisible: Boolean = false,
     val isVideoMode: Boolean = false,
     val preferredSourceMode: PreferredSourceMode = PreferredSourceMode.AUTO,
     val isRadioActive: Boolean = false,
     val radioSeedTrack: Track? = null
+)
+
+data class LyricsUiState(
+    val lyrics: com.example.data.lyrics.LyricsResult? = null,
+    val isLoading: Boolean = false,
+    val currentLineIndex: Int = -1,
+    val error: String? = null
 )
 
 data class RadioState(
@@ -106,6 +115,16 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     val playlists: StateFlow<List<PlaylistEntity>> = repository.playlistsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    private val downloadManager = com.example.data.download.DownloadManager.getInstance(application)
+
+    val downloadedTracks: StateFlow<List<Track>> = repository.downloadedFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val downloadProgress: StateFlow<Map<String, Float>> = downloadManager.downloadProgress
+
+    private val _lyricsState = MutableStateFlow(LyricsUiState())
+    val lyricsState: StateFlow<LyricsUiState> = _lyricsState.asStateFlow()
+
     private val _recommendations = MutableStateFlow<List<Track>>(emptyList())
     val recommendations: StateFlow<List<Track>> = _recommendations.asStateFlow()
 
@@ -125,6 +144,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private var suggestionJob: Job? = null
     private var genreJob: Job? = null
     private var autoplayJob: Job? = null
+    private var lyricsJob: Job? = null
 
     private var lastSeekTimestamp = 0L
     private var targetSeekSec = -1f
@@ -313,10 +333,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 if (preloadedMedia?.track?.externalId != nextTrack.videoId) {
                     val resolved = repository.resolveMedia(nextTrack, _playerState.value.preferredSourceMode)
                     preloadedMedia = resolved
-                    // 3. Preload into Android MediaPlayer for zero-gap transition
-                    if (resolved.playbackType == PlaybackType.DIRECT_AUDIO && !resolved.streamUrl.isNullOrBlank()) {
-                        audioPlaybackManager.preloadNextStream(nextTrack, resolved.streamUrl)
-                    }
                 }
             } catch (_: Exception) {}
         }
@@ -364,6 +380,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
                 // Fetch contextual recommendations asynchronously
                 loadRecommendations(updatedTrack)
+                loadLyrics(updatedTrack)
 
                 // Direct audio playback vs YouTube IFrame playback
                 if (resolved.playbackType == PlaybackType.DIRECT_AUDIO && !resolved.streamUrl.isNullOrBlank()) {
@@ -459,14 +476,96 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         playTrack(prev)
     }
 
+    fun toggleRepeatMode() {
+        val nextMode = (_playerState.value.repeatMode + 1) % 3 // 0 = OFF, 1 = ONE, 2 = ALL
+        audioPlaybackManager.toggleRepeatMode()
+        _playerState.update { it.copy(repeatMode = nextMode, isLooping = (nextMode == 1)) }
+        val modeName = when (nextMode) {
+            1 -> "REPEAT: ONE"
+            2 -> "REPEAT: ALL"
+            else -> "REPEAT: OFF"
+        }
+        showMessage(modeName)
+    }
+
     fun toggleLoop() {
-        _playerState.update { it.copy(isLooping = !it.isLooping) }
-        showMessage(if (_playerState.value.isLooping) "LOOP: ACTIVE" else "LOOP: OFF")
+        toggleRepeatMode()
     }
 
     fun toggleShuffle() {
-        _playerState.update { it.copy(isShuffling = !it.isShuffling) }
-        showMessage(if (_playerState.value.isShuffling) "SHUFFLE: ACTIVE" else "SHUFFLE: OFF")
+        val newShuffle = !_playerState.value.isShuffling
+        audioPlaybackManager.toggleShuffle()
+        _playerState.update { it.copy(isShuffling = newShuffle) }
+        showMessage(if (newShuffle) "SHUFFLE: ON" else "SHUFFLE: OFF")
+    }
+
+    fun playNext(track: Track) {
+        _playerState.update { current ->
+            val q = current.queue.toMutableList()
+            val insertIndex = (current.queueIndex + 1).coerceAtMost(q.size)
+            q.add(insertIndex, track)
+            current.copy(queue = q)
+        }
+        showMessage("PLAY NEXT: ${track.title.take(15)}")
+    }
+
+    fun reorderQueue(fromIndex: Int, toIndex: Int) {
+        _playerState.update { current ->
+            val q = current.queue.toMutableList()
+            if (fromIndex in q.indices && toIndex in q.indices) {
+                val item = q.removeAt(fromIndex)
+                q.add(toIndex, item)
+                val newIdx = when {
+                    current.queueIndex == fromIndex -> toIndex
+                    fromIndex < current.queueIndex && toIndex >= current.queueIndex -> current.queueIndex - 1
+                    fromIndex > current.queueIndex && toIndex <= current.queueIndex -> current.queueIndex + 1
+                    else -> current.queueIndex
+                }
+                current.copy(queue = q, queueIndex = newIdx)
+            } else current
+        }
+    }
+
+    fun toggleLyricsVisibility() {
+        _playerState.update { it.copy(isLyricsVisible = !it.isLyricsVisible) }
+    }
+
+    fun loadLyrics(track: Track) {
+        lyricsJob?.cancel()
+        _lyricsState.value = LyricsUiState(isLoading = true)
+        lyricsJob = viewModelScope.launch {
+            try {
+                val durSec = parseDurationSeconds(track.duration).toInt()
+                val result = com.example.data.lyrics.LyricsService.fetchLyrics(track.title, track.artist, durSec)
+                if (result != null) {
+                    _lyricsState.value = LyricsUiState(lyrics = result, isLoading = false)
+                } else {
+                    _lyricsState.value = LyricsUiState(isLoading = false, error = "No lyrics found")
+                }
+            } catch (e: Exception) {
+                _lyricsState.value = LyricsUiState(isLoading = false, error = "Failed to load lyrics")
+            }
+        }
+    }
+
+    fun downloadTrack(track: Track) {
+        downloadManager.downloadTrack(track) { success ->
+            if (success) {
+                showMessage("DOWNLOADED: ${track.title.take(20)}")
+            } else {
+                showMessage("DOWNLOAD FAILED")
+            }
+        }
+        showMessage("DOWNLOADING: ${track.title.take(15)}...")
+    }
+
+    fun deleteDownload(videoId: String) {
+        downloadManager.deleteDownload(videoId)
+        showMessage("DOWNLOAD REMOVED")
+    }
+
+    fun isDownloaded(videoId: String): Boolean {
+        return downloadManager.isDownloaded(videoId)
     }
 
     fun seekTo(seconds: Float) {
@@ -561,6 +660,16 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     totalDurationSec = if (durationSec > 0) durationSec else current.totalDurationSec,
                     isBuffering = false
                 )
+            }
+        }
+
+        // Update synced lyrics line index
+        val lyrics = _lyricsState.value.lyrics
+        if (lyrics != null && lyrics.syncedLyrics.isNotEmpty()) {
+            val curMs = (currentSec * 1000f).toLong()
+            val lineIdx = lyrics.syncedLyrics.indexOfLast { it.timestampMs <= curMs }
+            if (lineIdx != _lyricsState.value.currentLineIndex) {
+                _lyricsState.update { it.copy(currentLineIndex = lineIdx) }
             }
         }
 

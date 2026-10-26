@@ -11,6 +11,9 @@ interface TrackDao {
     @Query("SELECT * FROM tracks WHERE isFavorite = 1 ORDER BY addedToFavoritesTimestamp DESC")
     fun getFavorites(): Flow<List<TrackEntity>>
 
+    @Query("SELECT * FROM tracks WHERE isDownloaded = 1 ORDER BY title ASC")
+    fun getDownloadedTracks(): Flow<List<TrackEntity>>
+
     @Query("SELECT * FROM tracks WHERE lastPlayedTimestamp > 0 ORDER BY lastPlayedTimestamp DESC LIMIT :limit")
     fun getRecentlyPlayed(limit: Int = 50): Flow<List<TrackEntity>>
 
@@ -28,6 +31,9 @@ interface TrackDao {
 
     @Query("UPDATE tracks SET isFavorite = :isFavorite, addedToFavoritesTimestamp = :timestamp WHERE videoId = :videoId")
     suspend fun setFavorite(videoId: String, isFavorite: Boolean, timestamp: Long)
+
+    @Query("UPDATE tracks SET isDownloaded = :isDownloaded, downloadPath = :downloadPath WHERE videoId = :videoId")
+    suspend fun setDownloaded(videoId: String, isDownloaded: Boolean, downloadPath: String?)
 
     @Query("UPDATE tracks SET lastPlayedTimestamp = :timestamp, playCount = playCount + 1 WHERE videoId = :videoId")
     suspend fun recordPlay(videoId: String, timestamp: Long)

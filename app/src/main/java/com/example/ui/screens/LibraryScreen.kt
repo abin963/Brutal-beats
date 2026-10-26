@@ -34,7 +34,8 @@ import com.example.ui.theme.NyxPurpleLight
 
 enum class LibrarySubTab {
     FAVORITES,
-    PLAYLISTS
+    PLAYLISTS,
+    DOWNLOADS
 }
 
 @Composable
@@ -54,6 +55,8 @@ fun LibraryScreen(
     onClosePlaylist: () -> Unit,
     onRemoveTrackFromPlaylist: (Long, String) -> Unit,
     onStartRadio: (Track) -> Unit = {},
+    downloadedTracks: List<Track> = emptyList(),
+    onDeleteDownload: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var subTab by remember { mutableStateOf(LibrarySubTab.FAVORITES) }
@@ -126,10 +129,14 @@ fun LibraryScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = if (tab == LibrarySubTab.FAVORITES) "Favorites (${favorites.size})" else "Playlists (${playlists.size})",
+                                text = when (tab) {
+                                    LibrarySubTab.FAVORITES -> "Favorites (${favorites.size})"
+                                    LibrarySubTab.PLAYLISTS -> "Playlists (${playlists.size})"
+                                    LibrarySubTab.DOWNLOADS -> "Downloads (${downloadedTracks.size})"
+                                },
                                 color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                fontSize = 13.sp
+                                fontSize = 12.sp
                             )
                         }
                     }
@@ -156,6 +163,18 @@ fun LibraryScreen(
                         onOpenPlaylist = onOpenPlaylist,
                         onCreatePlaylistClick = { showCreateDialog = true },
                         onDeletePlaylist = onDeletePlaylist
+                    )
+                }
+                LibrarySubTab.DOWNLOADS -> {
+                    DownloadsList(
+                        downloadedTracks = downloadedTracks,
+                        currentPlayingVideoId = currentPlayingVideoId,
+                        isPlaying = isPlaying,
+                        onPlayTrack = onPlayTrack,
+                        onFavoriteToggle = onFavoriteToggle,
+                        onAddToQueue = onAddToQueue,
+                        onDeleteDownload = onDeleteDownload,
+                        onStartRadio = onStartRadio
                     )
                 }
             }
@@ -549,6 +568,67 @@ private fun PlaylistDetailView(
                     onAddToQueue = { onAddToQueue(track) },
                     onAddToPlaylist = { onRemoveTrack(track.videoId) },
                     onStartRadio = { onStartRadio(track) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DownloadsList(
+    downloadedTracks: List<Track>,
+    currentPlayingVideoId: String?,
+    isPlaying: Boolean,
+    onPlayTrack: (Track, List<Track>) -> Unit,
+    onFavoriteToggle: (Track) -> Unit,
+    onAddToQueue: (Track) -> Unit,
+    onDeleteDownload: (String) -> Unit,
+    onStartRadio: (Track) -> Unit = {}
+) {
+    if (downloadedTracks.isEmpty()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(bottom = 96.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    imageVector = Icons.Default.DownloadDone,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(54.dp)
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "No Downloaded Tracks",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Tap the download icon on any song to listen offline",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
+            }
+        }
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 96.dp)
+        ) {
+            items(downloadedTracks) { track ->
+                TrackCard(
+                    track = track,
+                    isPlaying = isPlaying && track.videoId == currentPlayingVideoId,
+                    onPlay = { onPlayTrack(track, downloadedTracks) },
+                    onFavoriteToggle = { onFavoriteToggle(track) },
+                    onAddToQueue = { onAddToQueue(track) },
+                    onAddToPlaylist = { onDeleteDownload(track.videoId) },
+                    onStartRadio = { onStartRadio(track) },
+                    modifier = Modifier.padding(vertical = 4.dp)
                 )
             }
         }

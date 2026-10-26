@@ -38,6 +38,10 @@ import com.example.ui.components.AmbientBackgroundLayer
 import com.example.ui.components.BrutalThumbnail
 import com.example.ui.components.TrackCard
 import com.example.ui.theme.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import com.example.ui.viewmodel.LyricsUiState
 import com.example.ui.viewmodel.PlayerUiState
 
 @Composable
@@ -71,6 +75,14 @@ fun NowPlayingScreen(
     onStartRadio: ((Track) -> Unit)? = null,
     onStopRadio: (() -> Unit)? = null,
     onRetryRadio: (() -> Unit)? = null,
+    lyricsState: LyricsUiState = LyricsUiState(),
+    onToggleLyrics: () -> Unit = {},
+    isDownloaded: Boolean = false,
+    downloadProgress: Float? = null,
+    onDownloadTrack: (Track) -> Unit = {},
+    onDeleteDownload: (String) -> Unit = {},
+    onPlayNext: (Track) -> Unit = {},
+    onToggleRepeatMode: () -> Unit = onToggleLoop,
     modifier: Modifier = Modifier
 ) {
     val track = playerState.currentTrack ?: return
@@ -292,54 +304,65 @@ fun NowPlayingScreen(
                         )
                     }
 
-                    // Bottom gradient & status pill
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(80.dp)
-                            .align(Alignment.BottomCenter)
-                            .background(
-                                Brush.verticalGradient(
-                                    colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))
-                                )
-                            )
-                    )
+                    // If user activated Lyrics Mode, overlay SyncedLyricsView
+                    if (playerState.isLyricsVisible) {
+                        SyncedLyricsView(
+                            lyricsState = lyricsState,
+                            onSeekToMs = { ms -> onSeek(ms / 1000f) },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
 
-                    Row(
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        val isDirect = playerState.playbackType == PlaybackType.DIRECT_AUDIO
+                    // Bottom gradient & status pill (hidden in lyrics mode)
+                    if (!playerState.isLyricsVisible) {
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(if (isDirect) NeonCyan else NeonLime)
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                .fillMaxWidth()
+                                .height(80.dp)
+                                .align(Alignment.BottomCenter)
+                                .background(
+                                    Brush.verticalGradient(
+                                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))
+                                    )
+                                )
+                        )
+
+                        Row(
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
+                            val isDirect = playerState.playbackType == PlaybackType.DIRECT_AUDIO
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(if (isDirect) NeonCyan else NeonLime)
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = if (isDirect) "320 KBPS DIRECT" else "YT AUDIO STREAM",
+                                    color = Color.Black,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Black,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(8.dp))
+
                             Text(
-                                text = if (isDirect) "320 KBPS DIRECT" else "YT AUDIO STREAM",
-                                color = Color.Black,
+                                text = when {
+                                    playerState.isBuffering -> "⏳ BUFFERING..."
+                                    playerState.isPlaying -> "● ACTIVE PLAYBACK"
+                                    else -> "❚❚ PAUSED"
+                                },
+                                color = Color.White,
                                 fontSize = 10.sp,
-                                fontWeight = FontWeight.Black,
+                                fontWeight = FontWeight.Bold,
                                 fontFamily = FontFamily.Monospace
                             )
                         }
-
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        Text(
-                            text = when {
-                                playerState.isBuffering -> "⏳ BUFFERING..."
-                                playerState.isPlaying -> "● ACTIVE PLAYBACK"
-                                else -> "❚❚ PAUSED"
-                            },
-                            color = Color.White,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace
-                        )
                     }
                 }
             }
@@ -372,26 +395,93 @@ fun NowPlayingScreen(
                     )
                 }
 
-                // Share Button
-                IconButton(
-                    onClick = {
-                        val shareIntent = Intent().apply {
-                            action = Intent.ACTION_SEND
-                            putExtra(
-                                Intent.EXTRA_TEXT,
-                                "Listening to \"${track.title}\" by ${track.artist} on Brutal Beats!\nhttps://youtube.com/watch?v=${track.videoId}"
-                            )
-                            type = "text/plain"
-                        }
-                        context.startActivity(Intent.createChooser(shareIntent, "Share Track"))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    // Lyrics Toggle Button
+                    IconButton(
+                        onClick = onToggleLyrics,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(if (playerState.isLyricsVisible) NyxPurple.copy(alpha = 0.25f) else Color(0x1AFFFFFF))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Lyrics,
+                            contentDescription = "Lyrics",
+                            tint = if (playerState.isLyricsVisible) NyxPurpleLight else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Share,
-                        contentDescription = "Share",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(24.dp)
-                    )
+
+                    // Offline Download Button
+                    if (downloadProgress != null && downloadProgress > 0f) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(Color(0x1AFFFFFF)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                progress = { downloadProgress },
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = NeonLime
+                            )
+                        }
+                    } else if (isDownloaded) {
+                        IconButton(
+                            onClick = { onDeleteDownload(track.videoId) },
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(NeonLime.copy(alpha = 0.2f))
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DownloadDone,
+                                contentDescription = "Downloaded - Tap to remove",
+                                tint = NeonLime,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    } else {
+                        IconButton(
+                            onClick = { onDownloadTrack(track) },
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(Color(0x1AFFFFFF))
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Download,
+                                contentDescription = "Download for offline listening",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
+                    // Share Button
+                    IconButton(
+                        onClick = {
+                            val shareIntent = Intent().apply {
+                                action = Intent.ACTION_SEND
+                                putExtra(
+                                    Intent.EXTRA_TEXT,
+                                    "Listening to \"${track.title}\" by ${track.artist} on NYX!\nhttps://youtube.com/watch?v=${track.videoId}"
+                                )
+                                type = "text/plain"
+                            }
+                            context.startActivity(Intent.createChooser(shareIntent, "Share Track"))
+                        },
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Share",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
 
@@ -548,18 +638,23 @@ fun NowPlayingScreen(
                     )
                 }
 
-                // Loop Button
+                // Repeat Mode Button (Off -> One -> All)
+                val repeatActive = playerState.repeatMode != 0 || playerState.isLooping
                 IconButton(
-                    onClick = onToggleLoop,
+                    onClick = onToggleRepeatMode,
                     modifier = Modifier
                         .size(48.dp)
                         .clip(CircleShape)
-                        .background(if (playerState.isLooping) NyxPurple.copy(alpha = 0.25f) else Color(0x1AFFFFFF))
+                        .background(if (repeatActive) NyxPurple.copy(alpha = 0.25f) else Color(0x1AFFFFFF))
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Repeat,
-                        contentDescription = "Repeat",
-                        tint = if (playerState.isLooping) NyxPurpleLight else MaterialTheme.colorScheme.onSurfaceVariant,
+                        imageVector = if (playerState.repeatMode == 1) Icons.Default.RepeatOne else Icons.Default.Repeat,
+                        contentDescription = when (playerState.repeatMode) {
+                            1 -> "Repeat One"
+                            2 -> "Repeat All"
+                            else -> "Repeat Off"
+                        },
+                        tint = if (repeatActive) NyxPurpleLight else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -868,6 +963,19 @@ fun NowPlayingScreen(
                                         maxLines = 1
                                     )
                                 }
+                                if (qTrack.videoId != track.videoId) {
+                                    IconButton(
+                                        onClick = { onPlayNext(qTrack) },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.PlaylistPlay,
+                                            contentDescription = "Play Next",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
                                 IconButton(
                                     onClick = { onRemoveFromQueue(idx) },
                                     modifier = Modifier.size(32.dp)
@@ -980,4 +1088,86 @@ private fun formatTime(seconds: Float): String {
     val mins = total / 60
     val secs = total % 60
     return String.format("%02d:%02d", mins, secs)
+}
+
+@Composable
+private fun SyncedLyricsView(
+    lyricsState: LyricsUiState,
+    onSeekToMs: (Long) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val listState = rememberLazyListState()
+    val lyrics = lyricsState.lyrics
+    val currentLineIndex = lyricsState.currentLineIndex
+
+    LaunchedEffect(currentLineIndex) {
+        if (currentLineIndex >= 0 && lyrics != null && lyrics.syncedLyrics.isNotEmpty()) {
+            val target = (currentLineIndex - 2).coerceAtLeast(0)
+            listState.animateScrollToItem(target)
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color(0xE60D0B18))
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        if (lyricsState.isLoading) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator(color = NyxPurpleLight, modifier = Modifier.size(32.dp), strokeWidth = 2.5.dp)
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("Loading lyrics...", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+            }
+        } else if (lyrics == null || (lyrics.syncedLyrics.isEmpty() && lyrics.plainLyrics.isNullOrBlank())) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.Default.MusicNote, contentDescription = null, tint = Color.White.copy(alpha = 0.35f), modifier = Modifier.size(36.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("No lyrics available", color = Color.White.copy(alpha = 0.65f), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            }
+        } else if (lyrics.syncedLyrics.isNotEmpty()) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                contentPadding = PaddingValues(vertical = 48.dp)
+            ) {
+                itemsIndexed(lyrics.syncedLyrics) { idx, line ->
+                    val isCurrent = idx == currentLineIndex
+                    val isPast = idx < currentLineIndex
+                    Text(
+                        text = line.text,
+                        color = when {
+                            isCurrent -> Color.White
+                            isPast -> Color.White.copy(alpha = 0.5f)
+                            else -> Color.White.copy(alpha = 0.25f)
+                        },
+                        fontSize = if (isCurrent) 19.sp else 15.sp,
+                        fontWeight = if (isCurrent) FontWeight.ExtraBold else FontWeight.Medium,
+                        lineHeight = if (isCurrent) 25.sp else 21.sp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSeekToMs(line.timestampMs) }
+                            .padding(vertical = 4.dp)
+                    )
+                }
+            }
+        } else if (!lyrics.plainLyrics.isNullOrBlank()) {
+            val plainScroll = rememberScrollState()
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(plainScroll)
+                    .padding(vertical = 24.dp)
+            ) {
+                Text(
+                    text = lyrics.plainLyrics,
+                    color = Color.White.copy(alpha = 0.85f),
+                    fontSize = 14.sp,
+                    lineHeight = 22.sp
+                )
+            }
+        }
+    }
 }

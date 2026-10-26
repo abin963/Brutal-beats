@@ -13,7 +13,9 @@ data class Track(
     val ytSourceLabel: String = "YOUTUBE",
     val sourceId: String = "YOUTUBE",
     val directStreamUrl: String? = null,
-    val matchConfidence: Float = 1.0f
+    val matchConfidence: Float = 1.0f,
+    val isDownloaded: Boolean = false,
+    val downloadPath: String? = null
 ) {
     val embedUrl: String
         get() = "https://www.youtube-nocookie.com/embed/$videoId?autoplay=1&enablejsapi=1&playsinline=1&controls=1&rel=0&modestbranding=1"

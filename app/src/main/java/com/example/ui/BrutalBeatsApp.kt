@@ -47,6 +47,9 @@ fun BrutalBeatsApp(
     val recommendations by viewModel.recommendations.collectAsStateWithLifecycle()
     val isLoadingRecommendations by viewModel.isLoadingRecommendations.collectAsStateWithLifecycle()
     val radioState by viewModel.radioState.collectAsStateWithLifecycle()
+    val downloadedTracks by viewModel.downloadedTracks.collectAsStateWithLifecycle()
+    val downloadProgress by viewModel.downloadProgress.collectAsStateWithLifecycle()
+    val lyricsState by viewModel.lyricsState.collectAsStateWithLifecycle()
 
     var trackToAddToPlaylist by remember { mutableStateOf<Track?>(null) }
     var showNewPlaylistInput by remember { mutableStateOf(false) }
@@ -164,7 +167,15 @@ fun BrutalBeatsApp(
                 radioState = radioState,
                 onStartRadio = { viewModel.startRadio(it) },
                 onStopRadio = { viewModel.stopRadio() },
-                onRetryRadio = { viewModel.retryRadioFetch() }
+                onRetryRadio = { viewModel.retryRadioFetch() },
+                lyricsState = lyricsState,
+                onToggleLyrics = { viewModel.toggleLyricsVisibility() },
+                isDownloaded = downloadedTracks.any { it.videoId == playerState.currentTrack?.videoId },
+                downloadProgress = downloadProgress[playerState.currentTrack?.videoId],
+                onDownloadTrack = { viewModel.downloadTrack(it) },
+                onDeleteDownload = { viewModel.deleteDownload(it) },
+                onPlayNext = { viewModel.playNext(it) },
+                onToggleRepeatMode = { viewModel.toggleRepeatMode() }
             )
         }
 
@@ -286,7 +297,9 @@ fun BrutalBeatsApp(
                                 onOpenPlaylist = { viewModel.openPlaylist(it) },
                                 onClosePlaylist = { viewModel.selectTab(MainTab.LIBRARY) },
                                 onRemoveTrackFromPlaylist = { pId, vId -> viewModel.removeTrackFromPlaylist(pId, vId) },
-                                onStartRadio = { viewModel.startRadio(it) }
+                                onStartRadio = { viewModel.startRadio(it) },
+                                downloadedTracks = downloadedTracks,
+                                onDeleteDownload = { viewModel.deleteDownload(it) }
                             )
                         }
 

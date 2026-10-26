@@ -27,6 +27,10 @@ class MusicRepository(private val database: AppDatabase) {
         list.map { it.toTrack() }
     }
 
+    val downloadedFlow: Flow<List<Track>> = trackDao.getDownloadedTracks().map { list ->
+        list.map { it.toTrack() }
+    }
+
     val playlistsFlow: Flow<List<PlaylistEntity>> = playlistDao.getAllPlaylists()
 
     suspend fun fetchTrendingTracks(sourceMode: PreferredSourceMode = PreferredSourceMode.AUTO): List<Track> = withContext(Dispatchers.IO) {
@@ -72,25 +76,44 @@ class MusicRepository(private val database: AppDatabase) {
         if (query.isBlank()) return@withContext emptyList()
 
         val results = when (sourceMode) {
-            PreferredSourceMode.YOUTUBE -> SourceRegistry.getYouTubeSource().search(query)
-            PreferredSourceMode.JIOSAAVN -> SourceRegistry.getJioSaavnSource().search(query)
+            PreferredSourceMode.YOUTUBE -> {
+                val ytm = YouTubeMusicService.searchSongs(query)
+                if (ytm.isNotEmpty()) ytm else SourceRegistry.getYouTubeSource().search(query).map { Track.fromUnifiedTrack(it) }
+            }
+            PreferredSourceMode.JIOSAAVN -> {
+                SourceRegistry.getJioSaavnSource().search(query).map { Track.fromUnifiedTrack(it) }
+            }
             PreferredSourceMode.AUTO -> coroutineScope {
-                val ytDeferred = async { SourceRegistry.getYouTubeSource().search(query) }
+                val ytmDeferred = async { YouTubeMusicService.searchSongs(query) }
                 val saavnDeferred = async { SourceRegistry.getJioSaavnSource().search(query) }
-                val yt = try { ytDeferred.await() } catch (_: Exception) { emptyList() }
-                val saavn = try { saavnDeferred.await() } catch (_: Exception) { emptyList() }
+                val ytm = try { ytmDeferred.await() } catch (_: Exception) { emptyList() }
+                val yt = if (ytm.isNotEmpty()) ytm else try { SourceRegistry.getYouTubeSource().search(query).map { Track.fromUnifiedTrack(it) } } catch (_: Exception) { emptyList() }
+                val saavn = try { saavnDeferred.await().map { Track.fromUnifiedTrack(it) } } catch (_: Exception) { emptyList() }
                 (yt + saavn).distinctBy { "${it.title.lowercase().trim()}_${it.artist.lowercase().trim()}" }
             }
         }
 
-        val domainTracks = results.map { Track.fromUnifiedTrack(it) }
-        if (domainTracks.isNotEmpty()) {
-            trackDao.insertTracks(domainTracks.map { TrackEntity.fromTrack(it) })
+        if (results.isNotEmpty()) {
+            trackDao.insertTracks(results.map { TrackEntity.fromTrack(it) })
         }
-        domainTracks
+        results
     }
 
     suspend fun resolveMedia(track: Track, preferredMode: PreferredSourceMode): ResolvedMedia = withContext(Dispatchers.IO) {
+        // If track is downloaded and local file exists, play offline immediately
+        if (track.isDownloaded && !track.downloadPath.isNullOrBlank()) {
+            val file = java.io.File(track.downloadPath)
+            if (file.exists() && file.length() > 0) {
+                return@withContext ResolvedMedia(
+                    track = track.toUnifiedTrack(),
+                    playbackType = PlaybackType.DIRECT_AUDIO,
+                    streamUrl = file.absolutePath,
+                    youtubeVideoId = null,
+                    sourceName = "Offline Download",
+                    resolutionNote = "OFFLINE AUDIO FILE"
+                )
+            }
+        }
         SourceResolver.resolve(track.toUnifiedTrack(), preferredMode)
     }
 
@@ -171,6 +194,10 @@ class MusicRepository(private val database: AppDatabase) {
         val candidateList = mutableListOf<Track>()
 
         coroutineScope {
+            val ytmRadioDeferred = if (seedTrack.videoId.isNotBlank()) {
+                async { YouTubeMusicService.fetchRadioTracks(seedTrack.videoId) }
+            } else null
+
             val radioQueryDeferred = if (cleanArtist.isNotBlank() && cleanTitle.isNotBlank()) {
                 async { search("$cleanArtist $cleanTitle radio", sourceMode) }
             } else null
@@ -187,6 +214,7 @@ class MusicRepository(private val database: AppDatabase) {
                 async { fetchGenreTracks(seedTrack.genre, sourceMode) }
             } else null
 
+            try { ytmRadioDeferred?.await()?.let { candidateList.addAll(it) } } catch (_: Exception) {}
             try { radioQueryDeferred?.await()?.let { candidateList.addAll(it) } } catch (_: Exception) {}
             try { similarDeferred?.await()?.let { candidateList.addAll(it) } } catch (_: Exception) {}
             try { artistHitsDeferred?.await()?.let { candidateList.addAll(it) } } catch (_: Exception) {}
