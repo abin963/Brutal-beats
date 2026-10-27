@@ -87,6 +87,9 @@ class MusicPlayerService : MediaSessionService() {
     private val _isShuffleEnabled = MutableStateFlow(false)
     val isShuffleEnabled: StateFlow<Boolean> = _isShuffleEnabled.asStateFlow()
 
+    private val _playbackSpeed = MutableStateFlow(1.0f)
+    val playbackSpeed: StateFlow<Float> = _playbackSpeed.asStateFlow()
+
     private var isUpdatingProgress = false
     private val progressRunnable = object : Runnable {
         override fun run() {
@@ -253,6 +256,20 @@ class MusicPlayerService : MediaSessionService() {
         val ms = (seconds * 1000).toLong()
         exoPlayer?.seekTo(ms)
         _currentPositionSec.value = seconds
+    }
+
+    fun seekBy(deltaSeconds: Float) {
+        val cur = _currentPositionSec.value
+        val dur = _durationSec.value
+        val maxBound = if (dur > 0f) dur else Float.MAX_VALUE
+        val target = (cur + deltaSeconds).coerceIn(0f, maxBound)
+        seekTo(target)
+    }
+
+    fun setPlaybackSpeed(speed: Float) {
+        val clamped = speed.coerceIn(0.25f, 3.0f)
+        _playbackSpeed.value = clamped
+        exoPlayer?.playbackParameters = androidx.media3.common.PlaybackParameters(clamped)
     }
 
     fun setVolume(vol0to100: Float) {

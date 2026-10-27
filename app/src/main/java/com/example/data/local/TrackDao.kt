@@ -43,4 +43,7 @@ interface TrackDao {
 
     @Query("UPDATE tracks SET lastPlayedTimestamp = 0")
     suspend fun clearHistory()
+
+    @Query("UPDATE tracks SET isDownloaded = 0, downloadPath = NULL WHERE isDownloaded = 1")
+    suspend fun clearAllDownloaded()
 }

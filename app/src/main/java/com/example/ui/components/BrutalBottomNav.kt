@@ -18,6 +18,8 @@ import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.LibraryMusic
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -53,7 +55,8 @@ fun BrutalBottomNav(
             NavItem(MainTab.HOME, "Home", Icons.Filled.Home, Icons.Outlined.Home),
             NavItem(MainTab.EXPLORE, "Explore", Icons.Filled.Explore, Icons.Outlined.Explore),
             NavItem(MainTab.LIBRARY, "Library", Icons.Filled.LibraryMusic, Icons.Outlined.LibraryMusic),
-            NavItem(MainTab.SEARCH, "Search", Icons.Filled.Search, Icons.Outlined.Search)
+            NavItem(MainTab.SEARCH, "Search", Icons.Filled.Search, Icons.Outlined.Search),
+            NavItem(MainTab.SETTINGS, "Settings", Icons.Filled.Settings, Icons.Outlined.Settings)
         )
     }
 
@@ -85,7 +88,7 @@ fun BrutalBottomNav(
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 10.dp),
+                    .padding(horizontal = 4.dp),
                 horizontalArrangement = Arrangement.SpaceAround,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -118,7 +121,7 @@ fun BrutalBottomNav(
                                 indication = ripple(bounded = true, radius = 28.dp),
                                 onClick = { onTabSelected(item.tab) }
                             )
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
                             .testTag("nav_tab_${item.title.lowercase()}")
                     ) {
                         // Glowing top indicator when selected

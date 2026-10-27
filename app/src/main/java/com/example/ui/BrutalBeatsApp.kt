@@ -90,6 +90,7 @@ fun BrutalBeatsApp(
                     isPlaying = playerState.isPlaying,
                     volume = if (playerState.isMuted) 0f else playerState.volume,
                     seekToSeconds = playerState.seekTargetSec,
+                    playbackSpeed = playerState.playbackSpeed,
                     trackTitle = playerState.currentTrack?.title ?: "NYX Music",
                     trackArtist = playerState.currentTrack?.artist ?: "High Quality Audio",
                     artworkUrl = playerState.currentTrack?.thumbnailUrl ?: "",
@@ -175,7 +176,13 @@ fun BrutalBeatsApp(
                 onDownloadTrack = { viewModel.downloadTrack(it) },
                 onDeleteDownload = { viewModel.deleteDownload(it) },
                 onPlayNext = { viewModel.playNext(it) },
-                onToggleRepeatMode = { viewModel.toggleRepeatMode() }
+                onToggleRepeatMode = { viewModel.toggleRepeatMode() },
+                onSetPlaybackSpeed = { viewModel.setPlaybackSpeed(it) },
+                onSeekForward = { viewModel.seekForward() },
+                onSeekBackward = { viewModel.seekBackward() },
+                onToggleRemainingTime = { viewModel.toggleRemainingTime() },
+                onToggleCastDialog = { viewModel.toggleCastDialog(it) },
+                onSelectAudioRoute = { viewModel.selectAudioRoute(it) }
             )
         }
 
@@ -200,7 +207,9 @@ fun BrutalBeatsApp(
                             MainTab.LIBRARY -> "Your Library"
                             MainTab.SEARCH -> "Search"
                             MainTab.HISTORY -> "History"
+                            MainTab.SETTINGS -> "Settings"
                         },
+                        onNavigateToSettings = { viewModel.selectTab(MainTab.SETTINGS) },
                         modifier = Modifier.statusBarsPadding()
                     )
                 },
@@ -335,6 +344,16 @@ fun BrutalBeatsApp(
                                 onAddToPlaylist = { trackToAddToPlaylist = it },
                                 onClearHistory = { viewModel.clearHistory() },
                                 onStartRadio = { viewModel.startRadio(it) }
+                            )
+                        }
+
+                        MainTab.SETTINGS -> {
+                            com.example.ui.screens.SettingsScreen(
+                                viewModel = viewModel,
+                                playerState = playerState,
+                                preferredSourceMode = uiState.preferredSourceMode,
+                                onSourceModeChanged = { viewModel.setPreferredSource(it) },
+                                onBack = { viewModel.selectTab(MainTab.HOME) }
                             )
                         }
                     }

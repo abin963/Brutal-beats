@@ -23,7 +23,8 @@ enum class MainTab {
     EXPLORE,
     LIBRARY,
     SEARCH,
-    HISTORY;
+    HISTORY,
+    SETTINGS;
 
     companion object {
         val DISCOVER: MainTab get() = EXPLORE
@@ -53,7 +54,12 @@ data class PlayerUiState(
     val isVideoMode: Boolean = false,
     val preferredSourceMode: PreferredSourceMode = PreferredSourceMode.AUTO,
     val isRadioActive: Boolean = false,
-    val radioSeedTrack: Track? = null
+    val radioSeedTrack: Track? = null,
+    val playbackSpeed: Float = 1.0f,
+    val seekIntervalSec: Int = 10,
+    val showRemainingTime: Boolean = false,
+    val isCastDialogOpen: Boolean = false,
+    val selectedAudioRoute: String = "Device Speaker"
 )
 
 data class LyricsUiState(
@@ -96,10 +102,20 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
         private const val KEY_AUTOPLAY = "is_autoplay_enabled"
+        private const val KEY_DEFAULT_SPEED = "pref_default_playback_speed"
+        private const val KEY_SEEK_INTERVAL = "pref_seek_interval"
+        private const val KEY_SHOW_REMAINING_TIME = "pref_show_remaining_time"
+        private const val KEY_DEFAULT_MODE = "pref_default_mode"
     }
 
     private val _playerState = MutableStateFlow(
-        PlayerUiState(isAutoplayEnabled = prefs.getBoolean(KEY_AUTOPLAY, true))
+        PlayerUiState(
+            isAutoplayEnabled = prefs.getBoolean(KEY_AUTOPLAY, true),
+            playbackSpeed = prefs.getFloat(KEY_DEFAULT_SPEED, 1.0f),
+            seekIntervalSec = prefs.getInt(KEY_SEEK_INTERVAL, 10),
+            showRemainingTime = prefs.getBoolean(KEY_SHOW_REMAINING_TIME, false),
+            isVideoMode = prefs.getString(KEY_DEFAULT_MODE, "AUDIO") == "VIDEO"
+        )
     )
     val playerState: StateFlow<PlayerUiState> = _playerState.asStateFlow()
 
@@ -121,6 +137,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val downloadProgress: StateFlow<Map<String, Float>> = downloadManager.downloadProgress
+    val downloadStates = downloadManager.downloadStates
 
     private val _lyricsState = MutableStateFlow(LyricsUiState())
     val lyricsState: StateFlow<LyricsUiState> = _lyricsState.asStateFlow()
@@ -566,6 +583,74 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     fun isDownloaded(videoId: String): Boolean {
         return downloadManager.isDownloaded(videoId)
+    }
+
+    fun cancelDownload(videoId: String) {
+        downloadManager.cancelDownload(videoId)
+        showMessage("DOWNLOAD CANCELLED")
+    }
+
+    fun clearAllDownloads() {
+        downloadManager.clearAllDownloads()
+        showMessage("ALL DOWNLOADS CLEARED")
+    }
+
+    fun getTotalDownloadsSize(): String =
+        com.example.data.download.DownloadManager.formatBytes(downloadManager.getTotalDownloadsSizeBytes())
+
+    fun getFreeStorage(): String =
+        com.example.data.download.DownloadManager.formatBytes(downloadManager.getFreeStorageBytes())
+
+    fun setPlaybackSpeed(speed: Float) {
+        val clamped = speed.coerceIn(0.25f, 3.0f)
+        _playerState.update { it.copy(playbackSpeed = clamped) }
+        audioPlaybackManager.setPlaybackSpeed(clamped)
+        prefs.edit().putFloat(KEY_DEFAULT_SPEED, clamped).apply()
+        showMessage("SPEED: ${clamped}x")
+    }
+
+    fun setSeekInterval(intervalSec: Int) {
+        _playerState.update { it.copy(seekIntervalSec = intervalSec) }
+        prefs.edit().putInt(KEY_SEEK_INTERVAL, intervalSec).apply()
+        showMessage("SEEK INTERVAL: ${intervalSec}s")
+    }
+
+    fun seekForward() {
+        val interval = _playerState.value.seekIntervalSec
+        val current = _playerState.value.currentPositionSec
+        val total = _playerState.value.totalDurationSec
+        val maxBound = if (total > 0f) total else current + interval
+        val target = (current + interval).coerceIn(0f, maxBound)
+        seekTo(target)
+    }
+
+    fun seekBackward() {
+        val interval = _playerState.value.seekIntervalSec
+        val current = _playerState.value.currentPositionSec
+        val target = (current - interval).coerceAtLeast(0f)
+        seekTo(target)
+    }
+
+    fun toggleRemainingTime() {
+        val current = _playerState.value.showRemainingTime
+        _playerState.update { it.copy(showRemainingTime = !current) }
+        prefs.edit().putBoolean(KEY_SHOW_REMAINING_TIME, !current).apply()
+    }
+
+    fun toggleCastDialog(show: Boolean? = null) {
+        _playerState.update { it.copy(isCastDialogOpen = show ?: !it.isCastDialogOpen) }
+    }
+
+    fun selectAudioRoute(routeName: String) {
+        _playerState.update { it.copy(selectedAudioRoute = routeName, isCastDialogOpen = false) }
+        showMessage("AUDIO ROUTE: $routeName")
+    }
+
+    fun setDefaultPlaybackMode(mode: String) {
+        val isVideo = mode.equals("VIDEO", ignoreCase = true)
+        _playerState.update { it.copy(isVideoMode = isVideo) }
+        prefs.edit().putString(KEY_DEFAULT_MODE, mode).apply()
+        showMessage("DEFAULT MODE: $mode")
     }
 
     fun seekTo(seconds: Float) {

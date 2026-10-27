@@ -9,42 +9,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.Color
 
-private val DarkColorScheme = darkColorScheme(
-    primary = NyxPurple,
-    onPrimary = Color.White,
-    primaryContainer = NeonLimeContainer,
-    onPrimaryContainer = NyxPurpleLight,
-    secondary = NyxCyan,
-    onSecondary = DarkBackground,
-    tertiary = NyxPink,
-    background = DarkBackground,
-    onBackground = DarkTextPrimary,
-    surface = DarkSurface,
-    onSurface = DarkTextPrimary,
-    surfaceVariant = DarkSurfaceVariant,
-    onSurfaceVariant = DarkTextSecondary,
-    outline = DarkBorder,
-    outlineVariant = Color(0xFF382F5A)
-)
-
-private val LightColorScheme = lightColorScheme(
-    primary = NyxPurple,
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFEDE9FE),
-    onPrimaryContainer = Color(0xFF581C87),
-    secondary = NyxCyan,
-    onSecondary = Color.White,
-    tertiary = NyxPink,
-    background = LightBackground,
-    onBackground = LightTextPrimary,
-    surface = LightSurface,
-    onSurface = LightTextPrimary,
-    surfaceVariant = LightSurfaceVariant,
-    onSurfaceVariant = LightTextSecondary,
-    outline = LightBorder,
-    outlineVariant = Color(0xFFC7BEDF)
-)
-
 @Composable
 fun BrutalBeatsTheme(
     darkTheme: Boolean = run {
@@ -53,7 +17,46 @@ fun BrutalBeatsTheme(
     },
     content: @Composable () -> Unit
 ) {
-    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
+    val isAmoled by ThemeManager.isAmoledMode.collectAsState()
+    val accent by ThemeManager.accentColor.collectAsState()
+
+    val colorScheme = if (darkTheme) {
+        darkColorScheme(
+            primary = accent.primary,
+            onPrimary = Color.White,
+            primaryContainer = accent.light.copy(alpha = 0.2f),
+            onPrimaryContainer = accent.light,
+            secondary = NyxCyan,
+            onSecondary = if (isAmoled) Color.Black else DarkBackground,
+            tertiary = NyxPink,
+            background = if (isAmoled) Color.Black else DarkBackground,
+            onBackground = DarkTextPrimary,
+            surface = if (isAmoled) Color(0xFF07050E) else DarkSurface,
+            onSurface = DarkTextPrimary,
+            surfaceVariant = if (isAmoled) Color(0xFF100C1F) else DarkSurfaceVariant,
+            onSurfaceVariant = DarkTextSecondary,
+            outline = DarkBorder,
+            outlineVariant = Color(0xFF382F5A)
+        )
+    } else {
+        lightColorScheme(
+            primary = accent.primary,
+            onPrimary = Color.White,
+            primaryContainer = accent.light.copy(alpha = 0.15f),
+            onPrimaryContainer = accent.primary,
+            secondary = NyxCyan,
+            onSecondary = Color.White,
+            tertiary = NyxPink,
+            background = LightBackground,
+            onBackground = LightTextPrimary,
+            surface = LightSurface,
+            onSurface = LightTextPrimary,
+            surfaceVariant = LightSurfaceVariant,
+            onSurfaceVariant = LightTextSecondary,
+            outline = LightBorder,
+            outlineVariant = Color(0xFFC7BEDF)
+        )
+    }
 
     MaterialTheme(
         colorScheme = colorScheme,

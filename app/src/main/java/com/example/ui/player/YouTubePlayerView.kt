@@ -109,6 +109,7 @@ fun YouTubePlayerView(
     trackTitle: String = "",
     trackArtist: String = "",
     artworkUrl: String = "",
+    playbackSpeed: Float = 1.0f,
     modifier: Modifier = Modifier
 ) {
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
@@ -135,6 +136,12 @@ fun YouTubePlayerView(
         val sec = seekToSeconds ?: return@LaunchedEffect
         val wv = webViewRef ?: return@LaunchedEffect
         wv.evaluateJavascript("seekTo($sec);", null)
+    }
+
+    // Synchronize playback speed
+    LaunchedEffect(playbackSpeed) {
+        val wv = webViewRef ?: return@LaunchedEffect
+        wv.evaluateJavascript("setPlaybackRate($playbackSpeed);", null)
     }
 
     // Load new track when videoId changes
@@ -478,6 +485,14 @@ private fun buildYouTubeHtml(
       try {
         if (player && player.setVolume) {
           player.setVolume(vol);
+        }
+      } catch(e) {}
+    }
+
+    function setPlaybackRate(rate) {
+      try {
+        if (player && player.setPlaybackRate) {
+          player.setPlaybackRate(rate);
         }
       } catch(e) {}
     }

@@ -41,6 +41,7 @@ import com.example.ui.theme.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import com.example.ui.viewmodel.LyricsUiState
 import com.example.ui.viewmodel.PlayerUiState
 
@@ -83,11 +84,19 @@ fun NowPlayingScreen(
     onDeleteDownload: (String) -> Unit = {},
     onPlayNext: (Track) -> Unit = {},
     onToggleRepeatMode: () -> Unit = onToggleLoop,
+    onSetPlaybackSpeed: (Float) -> Unit = {},
+    onSeekForward: () -> Unit = {},
+    onSeekBackward: () -> Unit = {},
+    onToggleRemainingTime: () -> Unit = {},
+    onToggleCastDialog: (Boolean?) -> Unit = {},
+    onSelectAudioRoute: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val track = playerState.currentTrack ?: return
     val context = LocalContext.current
     val scrollState = rememberScrollState()
+
+    var showSpeedDialog by remember { mutableStateOf(false) }
 
     val playInteractionSource = remember { MutableInteractionSource() }
     val isPlayPressed by playInteractionSource.collectIsPressedAsState()
@@ -212,22 +221,53 @@ fun NowPlayingScreen(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                // Video Mode Toggle (for YouTube playback)
-                if (playerState.playbackType == PlaybackType.YOUTUBE_EMBED) {
-                    IconButton(
-                        onClick = onToggleVideoMode,
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(if (playerState.isVideoMode) NeonLime.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant)
+                // Audio / Video Switcher Pill
+                Surface(
+                    onClick = onToggleVideoMode,
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (playerState.isVideoMode) NyxPurple.copy(alpha = 0.25f) else MaterialTheme.colorScheme.surfaceVariant,
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (playerState.isVideoMode) NyxPurpleLight else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                    ),
+                    modifier = Modifier.testTag("mode_switcher_pill")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = if (playerState.isVideoMode) Icons.Default.Image else Icons.Default.Videocam,
-                            contentDescription = if (playerState.isVideoMode) "Show Artwork" else "Show Video",
-                            tint = if (playerState.isVideoMode) NeonLime else MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(20.dp)
+                            imageVector = if (playerState.isVideoMode) Icons.Default.Videocam else Icons.Default.Headphones,
+                            contentDescription = if (playerState.isVideoMode) "Video Mode" else "Audio Mode",
+                            tint = if (playerState.isVideoMode) NyxPurpleLight else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (playerState.isVideoMode) "VIDEO" else "AUDIO",
+                            color = if (playerState.isVideoMode) NyxPurpleLight else MaterialTheme.colorScheme.onSurface,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
                         )
                     }
+                }
+
+                // Cast / Output Route Button
+                IconButton(
+                    onClick = { onToggleCastDialog(true) },
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(if (playerState.isCastDialogOpen) NyxCyan.copy(alpha = 0.25f) else MaterialTheme.colorScheme.surfaceVariant)
+                        .testTag("cast_audio_route_btn")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Cast,
+                        contentDescription = "Audio Output / Cast",
+                        tint = if (playerState.isCastDialogOpen) NyxCyan else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
 
                 // Favorite Toggle
@@ -290,6 +330,7 @@ fun NowPlayingScreen(
                             isPlaying = playerState.isPlaying,
                             volume = if (playerState.isMuted) 0f else playerState.volume,
                             seekToSeconds = playerState.seekTargetSec,
+                            playbackSpeed = playerState.playbackSpeed,
                             trackTitle = track.title,
                             trackArtist = track.artist,
                             artworkUrl = track.thumbnailUrl,
@@ -513,7 +554,8 @@ fun NowPlayingScreen(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = formatTime(displayCurrentSec),
@@ -532,15 +574,118 @@ fun NowPlayingScreen(
                     )
                 }
                 Text(
-                    text = formatTime(totalSec),
+                    text = if (playerState.showRemainingTime) {
+                        val rem = (totalSec - displayCurrentSec).coerceAtLeast(0f)
+                        "-${formatTime(rem)}"
+                    } else {
+                        formatTime(totalSec)
+                    },
                     fontSize = 11.sp,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.clickable { onToggleRemainingTime() }
                 )
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Quick Seek & Playback Speed Controls Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Seek Backward Button
+                Surface(
+                    onClick = onSeekBackward,
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color(0x1AFFFFFF),
+                    modifier = Modifier.testTag("seek_backward_btn")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Replay,
+                            contentDescription = "Seek back ${playerState.seekIntervalSec}s",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "-${playerState.seekIntervalSec}s",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+
+                // Playback Speed Selector Pill
+                Surface(
+                    onClick = { showSpeedDialog = true },
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (playerState.playbackSpeed != 1.0f) NyxPurple.copy(alpha = 0.25f) else Color(0x1AFFFFFF),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (playerState.playbackSpeed != 1.0f) NyxPurpleLight else Color(0x22FFFFFF)
+                    ),
+                    modifier = Modifier.testTag("playback_speed_btn")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Speed,
+                            contentDescription = "Playback Speed",
+                            tint = if (playerState.playbackSpeed != 1.0f) NyxPurpleLight else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "${playerState.playbackSpeed}×",
+                            color = if (playerState.playbackSpeed != 1.0f) NyxPurpleLight else MaterialTheme.colorScheme.onSurface,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+
+                // Seek Forward Button
+                Surface(
+                    onClick = onSeekForward,
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color(0x1AFFFFFF),
+                    modifier = Modifier.testTag("seek_forward_btn")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "+${playerState.seekIntervalSec}s",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Seek forward ${playerState.seekIntervalSec}s",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
 
             // Central Playback Controls: [Shuffle] [Prev] [GIANT LIQUID GLASS PLAY/PAUSE] [Next] [Repeat]
             Row(
@@ -1080,6 +1225,143 @@ fun NowPlayingScreen(
             Spacer(modifier = Modifier.height(32.dp))
         }
     }
+
+    // Playback Speed Selector Dialog
+    if (showSpeedDialog) {
+        val speeds = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
+        AlertDialog(
+            onDismissRequest = { showSpeedDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Speed, contentDescription = null, tint = NyxPurpleLight)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Playback Speed", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                }
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    speeds.forEach { sp ->
+                        val isSelected = kotlin.math.abs(playerState.playbackSpeed - sp) < 0.01f
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 3.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable {
+                                    onSetPlaybackSpeed(sp)
+                                    showSpeedDialog = false
+                                },
+                            color = if (isSelected) NyxPurple.copy(alpha = 0.25f) else Color.Transparent
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = if (sp == 1.0f) "1.0× (Normal)" else "${sp}×",
+                                    color = if (isSelected) NyxPurpleLight else MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 15.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                )
+                                if (isSelected) {
+                                    Icon(Icons.Default.Check, contentDescription = null, tint = NyxPurpleLight, modifier = Modifier.size(20.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSpeedDialog = false }) {
+                    Text("Close", color = NyxPurpleLight, fontWeight = FontWeight.Bold)
+                }
+            },
+            containerColor = Color(0xFF140F26)
+        )
+    }
+
+    // Cast / Audio Output Route Dialog
+    if (playerState.isCastDialogOpen) {
+        val routes = listOf(
+            "Device Speaker",
+            "Bluetooth Audio / Headset",
+            "Nearby Cast Target",
+            "External Audio Device"
+        )
+        AlertDialog(
+            onDismissRequest = { onToggleCastDialog(false) },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Cast, contentDescription = null, tint = NyxCyan)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Audio Output / Cast", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                }
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "Current Active Route: ${playerState.selectedAudioRoute}",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    routes.forEach { route ->
+                        val isSelected = playerState.selectedAudioRoute == route
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 3.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable {
+                                    onSelectAudioRoute(route)
+                                },
+                            color = if (isSelected) NyxPurple.copy(alpha = 0.25f) else Color.Transparent
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = when (route) {
+                                            "Device Speaker" -> Icons.Default.VolumeUp
+                                            "Bluetooth Audio / Headset" -> Icons.Default.Headphones
+                                            else -> Icons.Default.Cast
+                                        },
+                                        contentDescription = null,
+                                        tint = if (isSelected) NyxCyan else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text(
+                                        text = route,
+                                        color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        fontSize = 14.sp
+                                    )
+                                }
+                                if (isSelected) {
+                                    Text("Active", color = NyxCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { onToggleCastDialog(false) }) {
+                    Text("Done", color = NyxPurpleLight, fontWeight = FontWeight.Bold)
+                }
+            },
+            containerColor = Color(0xFF140F26)
+        )
+    }
 }
 }
 
@@ -1127,46 +1409,50 @@ private fun SyncedLyricsView(
                 Text("No lyrics available", color = Color.White.copy(alpha = 0.65f), fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
         } else if (lyrics.syncedLyrics.isNotEmpty()) {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-                contentPadding = PaddingValues(vertical = 48.dp)
-            ) {
-                itemsIndexed(lyrics.syncedLyrics) { idx, line ->
-                    val isCurrent = idx == currentLineIndex
-                    val isPast = idx < currentLineIndex
-                    Text(
-                        text = line.text,
-                        color = when {
-                            isCurrent -> Color.White
-                            isPast -> Color.White.copy(alpha = 0.5f)
-                            else -> Color.White.copy(alpha = 0.25f)
-                        },
-                        fontSize = if (isCurrent) 19.sp else 15.sp,
-                        fontWeight = if (isCurrent) FontWeight.ExtraBold else FontWeight.Medium,
-                        lineHeight = if (isCurrent) 25.sp else 21.sp,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSeekToMs(line.timestampMs) }
-                            .padding(vertical = 4.dp)
-                    )
+            SelectionContainer {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    contentPadding = PaddingValues(vertical = 48.dp)
+                ) {
+                    itemsIndexed(lyrics.syncedLyrics) { idx, line ->
+                        val isCurrent = idx == currentLineIndex
+                        val isPast = idx < currentLineIndex
+                        Text(
+                            text = line.text,
+                            color = when {
+                                isCurrent -> Color.White
+                                isPast -> Color.White.copy(alpha = 0.5f)
+                                else -> Color.White.copy(alpha = 0.25f)
+                            },
+                            fontSize = if (isCurrent) 19.sp else 15.sp,
+                            fontWeight = if (isCurrent) FontWeight.ExtraBold else FontWeight.Medium,
+                            lineHeight = if (isCurrent) 25.sp else 21.sp,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSeekToMs(line.timestampMs) }
+                                .padding(vertical = 4.dp)
+                        )
+                    }
                 }
             }
         } else if (!lyrics.plainLyrics.isNullOrBlank()) {
             val plainScroll = rememberScrollState()
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(plainScroll)
-                    .padding(vertical = 24.dp)
-            ) {
-                Text(
-                    text = lyrics.plainLyrics,
-                    color = Color.White.copy(alpha = 0.85f),
-                    fontSize = 14.sp,
-                    lineHeight = 22.sp
-                )
+            SelectionContainer {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(plainScroll)
+                        .padding(vertical = 24.dp)
+                ) {
+                    Text(
+                        text = lyrics.plainLyrics,
+                        color = Color.White.copy(alpha = 0.85f),
+                        fontSize = 14.sp,
+                        lineHeight = 22.sp
+                    )
+                }
             }
         }
     }

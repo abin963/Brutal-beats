@@ -49,6 +49,7 @@ fun HeaderSection(
     onSourceModeChanged: (PreferredSourceMode) -> Unit = {},
     title: String = "Listen Now",
     showListenNowHeader: Boolean = true,
+    onNavigateToSettings: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -576,6 +577,57 @@ fun HeaderSection(
                                 )
                             }
                         }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Full Settings Button
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = NyxPurple.copy(alpha = 0.2f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, NyxPurple.copy(alpha = 0.4f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            showProfileSheet = false
+                            onNavigateToSettings()
+                        }
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = null,
+                                tint = NyxPurpleLight,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column {
+                                Text(
+                                    text = "All NYX Settings",
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "Themes, accents, playback speeds, storage",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            tint = NyxPurpleLight
+                        )
                     }
                 }
 

@@ -69,6 +69,14 @@ class AudioPlaybackManager(private val context: Context) {
         MusicPlayerService.getInstance()?.seekTo(seconds)
     }
 
+    fun seekBy(deltaSeconds: Float) {
+        MusicPlayerService.getInstance()?.seekBy(deltaSeconds)
+    }
+
+    fun setPlaybackSpeed(speed: Float) {
+        MusicPlayerService.getInstance()?.setPlaybackSpeed(speed)
+    }
+
     fun setVolume(volume0to100: Float) {
         MusicPlayerService.getInstance()?.setVolume(volume0to100)
     }
